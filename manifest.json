@@ -1,0 +1,12 @@
+{
+  "name": "DCLK Dual MIDI Clock Firmware",
+  "version": "v0.1.0",
+  "builds": [
+    {
+      "chipFamily": "STM32F411",
+      "parts": [
+        { "path": "firmware/DCLK_FIRMWARE.ino.hex" }
+      ]
+    }
+  ]
+}

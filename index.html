@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DCLK Firmware Flasher | .axs instruments</title>
+  <style>
+    :root {
+      --bg-color: #0d1117;
+      --card-bg: #161b22;
+      --border-color: #30363d;
+      --text-main: #c9d1d9;
+      --text-heading: #f0f6fc;
+      --text-muted: #8b949e;
+      --accent-blue: #2f81f7;
+      --accent-green: #238636;
+      --accent-green-hover: #2ea043;
+      --accent-red: #f85149;
+      --warning-bg: #271e13;
+      --warning-border: #845306;
+      --warning-text: #f2cc60;
+      --console-bg: #040d14;
+      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    [hidden] { display: none !important; }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      font-family: var(--font-family);
+      line-height: 1.6;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      padding: 32px 16px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 680px;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 32px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    @media (max-width: 520px) {
+      .container { padding: 20px 16px; }
+      .action-area { padding: 16px; }
+    }
+
+    .header {
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 20px;
+      margin-bottom: 24px;
+    }
+
+    .brand {
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      color: var(--accent-blue);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    h1 { color: var(--text-heading); font-size: 1.75rem; font-weight: 600; }
+    .subtitle { color: var(--text-muted); font-size: 0.95rem; margin-top: 4px; }
+
+    .badge-container { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+    .badge {
+      font-size: 0.75rem;
+      background: #21262d;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+
+    .section { margin-bottom: 24px; }
+    .section-title { font-size: 1rem; font-weight: 600; color: var(--text-heading); margin-bottom: 12px; }
+
+    ol { padding-left: 20px; font-size: 0.92rem; }
+    li { margin-bottom: 8px; }
+    li small { color: var(--text-muted); display: block; }
+
+    .warning-box {
+      background: var(--warning-bg);
+      border: 1px solid var(--warning-border);
+      color: var(--warning-text);
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      margin-bottom: 24px;
+    }
+
+    .action-area {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 24px;
+      background: #0d1117;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin-bottom: 24px;
+    }
+
+    fieldset { border: 0; display: flex; flex-direction: column; gap: 8px; }
+    legend { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+
+    .choice {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 10px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.92rem;
+    }
+    .choice:has(input:checked) { border-color: var(--accent-blue); background: rgba(47,129,247,0.08); }
+    .choice input { margin-top: 5px; accent-color: var(--accent-blue); }
+    .choice .hint { display: block; color: var(--text-muted); font-size: 0.82rem; }
+
+    .custom-fields { display: none; flex-direction: column; gap: 8px; padding: 4px 0 0 2px; }
+    .custom-fields.visible { display: flex; }
+    .custom-fields label { font-size: 0.85rem; color: var(--text-muted); }
+    .custom-fields input[type="text"] {
+      background: var(--console-bg);
+      color: var(--text-heading);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      width: 140px;
+    }
+    .custom-fields input[type="file"] { color: var(--text-main); font-size: 0.85rem; max-width: 100%; }
+    .addr-row { display: none; align-items: center; gap: 10px; }
+    .addr-row.visible { display: flex; }
+
+    .image-info {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      min-height: 1.2em;
+    }
+    .image-info .warn { color: var(--warning-text); display: block; font-family: var(--font-family); }
+
+    .options { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 0.88rem; }
+    .options label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .options input { accent-color: var(--accent-blue); }
+
+    .flash-row { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+
+    .btn-primary {
+      background-color: var(--accent-green);
+      color: #ffffff;
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 12px 28px;
+      font-size: 1rem;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.15s ease;
+    }
+
+    .btn-primary:hover { background-color: var(--accent-green-hover); }
+    .btn-primary:disabled { background-color: #21262d; color: var(--text-muted); cursor: not-allowed; }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #21262d;
+      color: var(--text-heading);
+      border: 1px solid var(--border-color);
+      padding: 8px 16px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 0.88rem;
+      cursor: pointer;
+      align-self: center;
+    }
+
+    .btn-secondary:hover { background: #30363d; }
+
+    .status-text { font-size: 0.9rem; color: var(--text-muted); text-align: center; }
+    .status-text.ok { color: #3fb950; }
+    .status-text.error { color: var(--accent-red); }
+
+    .progress {
+      width: 100%;
+      height: 8px;
+      background: #21262d;
+      border-radius: 4px;
+      overflow: hidden;
+      visibility: hidden;
+    }
+    .progress.visible { visibility: visible; }
+    .progress-bar { height: 100%; width: 0; background: var(--accent-blue); transition: width 0.15s linear; }
+
+    .console-container { width: 100%; text-align: left; }
+
+    .console-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      gap: 8px;
+    }
+
+    .console-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .console-box {
+      background-color: var(--console-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 12px;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: #58a6ff;
+      height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    details {
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 24px;
+      font-size: 0.9rem;
+    }
+    details summary { cursor: pointer; font-weight: 600; color: var(--text-heading); }
+    details h3 { font-size: 0.92rem; color: var(--text-heading); margin: 16px 0 4px; }
+    details p { color: var(--text-main); }
+    code { font-family: var(--mono); font-size: 0.85em; background: #21262d; padding: 1px 5px; border-radius: 4px; }
+    a { color: var(--accent-blue); }
+
+    .footer {
+      border-top: 1px solid var(--border-color);
+      padding-top: 16px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: space-between;
+      align-items: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header class="header">
+      <div class="brand">.axs instruments</div>
+      <h1>DCLK Dual MIDI&nbsp;Clock</h1>
+      <p class="subtitle">WebUSB / DFU Firmware&nbsp;Flasher</p>
+      <div class="badge-container">
+        <span class="badge">Hardware: STM32F411CEU6 Black Pill</span>
+        <span class="badge" id="versionBadge">Firmware: loading&hellip;</span>
+      </div>
+    </header>
+
+    <div class="warning-box">
+      <strong>Requirements:</strong> Chrome or Edge on a computer (WebUSB is not available in Firefox, Safari or on iPhone). On Windows the bootloader may need a one time driver change, see Troubleshooting&nbsp;below.
+    </div>
+
+    <section class="section">
+      <h2 class="section-title">How to&nbsp;flash</h2>
+      <ol>
+        <li>Connect DCLK with a USB&#8209;C data cable (plug it straight into the computer, not a&nbsp;hub). Stop any clock that is running and close apps using it as a MIDI&nbsp;device.</li>
+        <li>Put it into DFU mode: <strong>hold BOOT0</strong>, tap <strong>NRST</strong>, keep holding BOOT0 for about one second, then let&nbsp;go.
+          <small>You can also hold BOOT0 while plugging the cable in. These boards sometimes need two or three tries. In DFU mode the OLED and LEDs stay off and DCLK no longer shows up as a MIDI&nbsp;device.</small></li>
+        <li>Choose the firmware below, click <strong>Flash Firmware</strong> and pick <strong>STM32 BOOTLOADER</strong> in the&nbsp;popup.</li>
+        <li>Wait for <strong>Done</strong>. DCLK restarts by itself. If it does not, press <strong>NRST</strong>&nbsp;once.
+          <small>Your saved settings (LED brightness, MIDI options) are kept: the flasher never erases the settings&nbsp;area.</small></li>
+      </ol>
+    </section>
+
+    <div class="action-area">
+      <fieldset>
+        <legend>Firmware</legend>
+        <label class="choice">
+          <input type="radio" name="source" value="release" checked>
+          <span><span id="releaseLabel">Latest release</span>
+            <span class="hint">Downloaded from this&nbsp;site</span></span>
+        </label>
+        <label class="choice">
+          <input type="radio" name="source" value="custom">
+          <span>Custom file
+            <span class="hint">A .hex or .bin you built yourself. Prefer the .hex, it carries its own&nbsp;address.</span></span>
+        </label>
+        <div class="custom-fields" id="customFields">
+          <input type="file" id="fileInput" accept=".hex,.bin,.ihex">
+          <div class="addr-row" id="addrRow">
+            <label for="addrInput">.bin start address</label>
+            <input type="text" id="addrInput" value="0x08000000" spellcheck="false">
+          </div>
+        </div>
+        <div class="image-info" id="imageInfo"></div>
+      </fieldset>
+
+      <div class="options">
+        <label><input type="checkbox" id="verifyOpt" checked> Verify after&nbsp;writing</label>
+        <label><input type="checkbox" id="runOpt" checked> Start firmware when&nbsp;done</label>
+      </div>
+
+      <div class="flash-row">
+        <button id="flashBtn" class="btn-primary" disabled>Flash Firmware</button>
+        <div class="progress" id="progress"><div class="progress-bar" id="progressBar"></div></div>
+        <div id="status" class="status-text">Loading firmware&hellip;</div>
+      </div>
+
+      <div class="console-container">
+        <div class="console-header">
+          <span class="console-title">Live Debug Terminal</span>
+          <button id="downloadLogBtn" class="btn-secondary" style="padding: 4px 10px; font-size: 0.75rem;">📥 Download Log (.txt)</button>
+        </div>
+        <div id="consoleBox" class="console-box"></div>
+      </div>
+
+      <a href="#" id="videoLink" target="_blank" rel="noopener" class="btn-secondary" hidden>
+        📺 Watch Setup &amp; Flashing Video&nbsp;Tutorial
+      </a>
+    </div>
+
+    <details>
+      <summary>Troubleshooting</summary>
+
+      <h3>STM32 BOOTLOADER is not in the&nbsp;list</h3>
+      <p>The board is not in DFU mode yet. If your computer lists DCLK as a MIDI device instead, it is still running its normal firmware. Repeat step 2, try a different cable (many USB&#8209;C cables are charge only) and plug directly into the computer. On Windows, Device Manager should show <em>STM32 BOOTLOADER</em> while it is in DFU&nbsp;mode.</p>
+
+      <h3>Windows: "Access denied" or "Unable to claim&nbsp;interface"</h3>
+      <p>Chrome can only talk to the bootloader through the WinUSB driver. Download <a href="https://zadig.akeo.ie/" target="_blank" rel="noopener">Zadig</a>, put the board in DFU mode, choose <em>Options &gt; List All Devices</em>, select <em>STM32 BOOTLOADER</em>, pick <em>WinUSB</em> and click <em>Replace Driver</em>. This is needed once per&nbsp;computer.</p>
+
+      <h3>Linux: the device appears but cannot be&nbsp;opened</h3>
+      <p>Add a udev rule so your user can access it, for example <code>SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="df11", MODE="0666"</code> in <code>/etc/udev/rules.d/50-stm32-dfu.rules</code>, then unplug and replug the&nbsp;board.</p>
+
+      <h3>Warnings about "A transfer error has&nbsp;occurred"</h3>
+      <p>Some boards' built-in bootloader struggles with certain data patterns. The flasher works around this by itself: it skips blank data and resends any piece that fails in smaller parts, so a few warnings in the log are normal and the result is still checked byte by byte. If it gives up completely, try again or try another&nbsp;computer.</p>
+
+      <h3>It flashed, but DCLK does not&nbsp;start</h3>
+      <p>Make sure BOOT0 is released, then press NRST or unplug and replug. If you flashed a custom file, it must be built to start at <code>0x08000000</code> (no HID or UF2 bootloader offset); the flasher warns you when it is not. If it still does not start, click <em>Download Log</em> and send it to&nbsp;us.</p>
+    </details>
+
+    <footer class="footer">
+      <div>&copy; .axs instruments. All rights&nbsp;reserved.</div>
+      <div>Target: STM32F411&nbsp;(GenF4)</div>
+    </footer>
+  </div>
+
+  <script type="module">
+    import { FirmwareImage, StmDfuse, DfuError, FLASH_BASE, hex32 } from './dfuse.js';
+
+    const $ = (id) => document.getElementById(id);
+    const flashBtn = $('flashBtn');
+    const statusDiv = $('status');
+    const consoleBox = $('consoleBox');
+    const imageInfo = $('imageInfo');
+    const progress = $('progress');
+    const progressBar = $('progressBar');
+
+    const logHistory = [];
+    let manifest = null;
+    let releaseImage = null;
+    let customImage = null;
+    let busy = false;
+
+    function log(message, type = 'INFO') {
+      const time = new Date().toLocaleTimeString();
+      const line = `[${time}] [${type}] ${message}`;
+      logHistory.push(line);
+      consoleBox.textContent += line + '\n';
+      consoleBox.scrollTop = consoleBox.scrollHeight;
+    }
+
+    // Keep the last two words together so a status line never ends on one word.
+    const keepTogether = (s) => s.replace(/ (\S+)$/, ' $1');
+
+    function setStatus(text, kind = '') {
+      statusDiv.textContent = keepTogether(text);
+      statusDiv.className = 'status-text' + (kind ? ' ' + kind : '');
+    }
+
+    function setProgress(fraction) {
+      progress.classList.toggle('visible', fraction !== null);
+      progressBar.style.width = `${Math.round((fraction || 0) * 100)}%`;
+    }
+
+    $('downloadLogBtn').addEventListener('click', () => {
+      const header = [
+        `DCLK flasher log, ${new Date().toISOString()}`,
+        `Browser: ${navigator.userAgent}`,
+        `Firmware source: ${source()}`,
+        '',
+      ];
+      const blob = new Blob([header.concat(logHistory).join('\n')], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dclk-flasher-log-${Date.now()}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    const source = () => document.querySelector('input[name="source"]:checked').value;
+    const currentImage = () => (source() === 'release' ? releaseImage : customImage);
+
+    function describe(image) {
+      const segs = image.segments();
+      const first = segs[0].address;
+      const last = segs[segs.length - 1];
+      const end = last.address + last.data.length - 1;
+      const kb = (image.byteCount / 1024).toFixed(1);
+      return `${kb} KB, ${hex32(first)} to ${hex32(end)}` + (segs.length > 1 ? `, ${segs.length} parts` : '');
+    }
+
+    function showImageInfo() {
+      const image = currentImage();
+      imageInfo.textContent = '';
+      if (!image) {
+        flashBtn.disabled = true;
+        return;
+      }
+      imageInfo.append(describe(image));
+      for (const w of image.warnings()) {
+        const span = document.createElement('span');
+        span.className = 'warn';
+        span.textContent = keepTogether('Warning: ' + w);
+        imageInfo.append(span);
+      }
+      flashBtn.disabled = busy;
+    }
+
+    function parseAddress(text) {
+      const t = String(text).trim();
+      const n = /^0x[0-9a-f]+$/i.test(t) ? parseInt(t, 16) : /^\d+$/.test(t) ? parseInt(t, 10) : NaN;
+      if (Number.isNaN(n)) throw new DfuError(`"${text}" is not an address`);
+      // Small numbers are offsets from the start of flash, e.g. "0x4000".
+      return (n < FLASH_BASE ? FLASH_BASE + n : n) >>> 0;
+    }
+
+    // Release firmware from manifest.json
+    async function loadRelease() {
+      const res = await fetch('manifest.json?v=' + Date.now());
+      if (!res.ok) throw new DfuError(`Could not download manifest.json (${res.status})`);
+      manifest = await res.json();
+      const build = manifest.builds && manifest.builds[0];
+      if (!build || !build.parts || !build.parts.length) throw new DfuError('manifest.json has no firmware parts');
+
+      $('versionBadge').textContent = `Firmware: ${manifest.version || '?'}`;
+      $('releaseLabel').textContent = `Latest release (${manifest.version || 'unknown version'})`;
+      if (manifest.video) {
+        $('videoLink').href = manifest.video;
+        $('videoLink').hidden = false;
+      }
+
+      const image = new FirmwareImage();
+      for (const part of build.parts) {
+        const r = await fetch(part.path + '?v=' + Date.now());
+        if (!r.ok) throw new DfuError(`Could not download ${part.path} (${r.status})`);
+        const name = part.path.split('/').pop();
+        if (/\.(hex|ihex)$/i.test(part.path)) {
+          image.addHex(await r.text(), name); // addresses come from the file itself
+        } else {
+          image.addBin(new Uint8Array(await r.arrayBuffer()), parseAddress(part.offset || '0'), name);
+        }
+        log(`Loaded ${name}`);
+      }
+      image.segments(); // throws if parts overlap
+      releaseImage = image;
+      log(`Release ${manifest.version}: ${describe(image)}`);
+    }
+
+    async function loadCustom() {
+      const file = $('fileInput').files[0];
+      customImage = null;
+      if (!file) return;
+      const isHex = /\.(hex|ihex)$/i.test(file.name);
+      $('addrRow').classList.toggle('visible', !isHex);
+      try {
+        const image = new FirmwareImage();
+        if (isHex) image.addHex(await file.text(), file.name);
+        else image.addBin(new Uint8Array(await file.arrayBuffer()), parseAddress($('addrInput').value), file.name);
+        image.segments();
+        customImage = image;
+        log(`Custom file ${file.name}: ${describe(image)}`);
+        setStatus('Ready to flash');
+      } catch (e) {
+        log(`${file.name}: ${e.message}`, 'ERROR');
+        setStatus(e.message, 'error');
+      }
+    }
+
+    function onSourceChange() {
+      $('customFields').classList.toggle('visible', source() === 'custom');
+      showImageInfo();
+      if (source() === 'custom' && !customImage) setStatus('Choose a .hex or .bin file');
+      else if (currentImage()) setStatus('Ready to flash');
+    }
+
+    document.querySelectorAll('input[name="source"]').forEach((r) => r.addEventListener('change', onSourceChange));
+    $('fileInput').addEventListener('change', async () => { await loadCustom(); showImageInfo(); });
+    $('addrInput').addEventListener('change', async () => { await loadCustom(); showImageInfo(); });
+
+    // Errors from WebUSB itself get a plain explanation.
+    function explain(err) {
+      const msg = (err && err.message) || String(err);
+      if (err && err.name === 'NotFoundError' && /No device selected/i.test(msg)) {
+        return 'No device chosen. If STM32 BOOTLOADER was not in the list, the board is not in DFU mode yet (see step 2).';
+      }
+      if (err && (err.name === 'SecurityError' || err.name === 'NetworkError') && /access denied|claim|open/i.test(msg)) {
+        const os = /Windows/i.test(navigator.userAgent)
+          ? 'On Windows this usually means the WinUSB driver is missing; see Troubleshooting.'
+          : /Linux/i.test(navigator.userAgent)
+            ? 'On Linux this usually means a udev rule is missing; see Troubleshooting.'
+            : 'Close any other program that is using the board (STM32CubeProgrammer, Arduino IDE) and try again.';
+        return `The browser could not open the bootloader (${msg}). ${os}`;
+      }
+      if (err && err.name === 'NotFoundError') return 'The board disconnected. Re-enter DFU mode and try again.';
+      if (err && err.usbUnreliable) {
+        return "The board's built-in bootloader could not receive part of the firmware, even one byte at a time. " +
+          'Re-enter DFU mode and try again, or try another computer. Please send the log (Download Log) if it keeps happening.';
+      }
+      return msg;
+    }
+
+    flashBtn.addEventListener('click', async () => {
+      if (!navigator.usb) {
+        setStatus('WebUSB is not available in this browser. Use Chrome or Edge on a computer.', 'error');
+        log('navigator.usb is undefined', 'ERROR');
+        return;
+      }
+      const image = currentImage();
+      if (!image) return;
+
+      const warnings = image.warnings();
+      if (source() === 'custom' && warnings.length &&
+          !confirm(warnings.join('\n\n') + '\n\nFlash it anyway?')) return;
+
+      busy = true;
+      flashBtn.disabled = true;
+      setProgress(null);
+      let dfu = null;
+      let left = false;
+      const t0 = performance.now();
+
+      try {
+        setStatus('Choose STM32 BOOTLOADER in the popup');
+        log('Requesting WebUSB device 0483:DF11 (STM32 BOOTLOADER)');
+        const usbDevice = await navigator.usb.requestDevice({ filters: [{ vendorId: 0x0483, productId: 0xdf11 }] });
+        log(`Selected: ${usbDevice.productName || 'STM32 BOOTLOADER'}${usbDevice.serialNumber ? ', serial ' + usbDevice.serialNumber : ''}`);
+
+        setStatus('Connecting');
+        // ?block=256 forces smaller USB transfers, for boards with a flaky link.
+        const blockParam = parseInt(new URLSearchParams(location.search).get('block'), 10);
+        dfu = new StmDfuse(usbDevice, { log, blockSize: Number.isFinite(blockParam) ? blockParam : 0 });
+        await dfu.open();
+        log(`DFU ready: ${dfu.layout.name}, ${(dfu.layout.end - dfu.layout.start) / 1024} KB flash`);
+        for (const w of warnings) log(w, 'WARN');
+
+        setProgress(0);
+        await dfu.flash(image, {
+          verify: $('verifyOpt').checked,
+          onProgress: (f, phase) => {
+            setProgress(f);
+            setStatus(`${phase} ${Math.round(f * 100)}%`);
+          },
+        });
+        const secs = ((performance.now() - t0) / 1000).toFixed(1);
+        log(`Flash ${$('verifyOpt').checked ? 'written and verified' : 'written'} in ${secs} s`, 'SUCCESS');
+
+        if ($('runOpt').checked) {
+          log('Asking the bootloader to start the firmware');
+          await dfu.leave(FLASH_BASE);
+          left = true;
+        }
+
+        const note = source() === 'release' && manifest.builds[0].note ? ' ' + manifest.builds[0].note : '';
+        setStatus(($('runOpt').checked
+          ? 'Done! DCLK is starting.'
+          : 'Done! Release BOOT0 and press NRST to start DCLK.') + note, 'ok');
+      } catch (err) {
+        const text = explain(err);
+        log(text, 'ERROR');
+        if (err && err.name) log(`(${err.name}: ${err.message})`, 'DEBUG');
+        if (err && err.stack) console.error(err);
+        setStatus(text, 'error');
+        setProgress(null);
+      } finally {
+        if (dfu && !left) await dfu.close();
+        busy = false;
+        showImageInfo();
+      }
+    });
+
+    log('Flasher loaded. Waiting for firmware download.');
+    loadRelease()
+      .then(() => { setStatus('Ready to flash'); showImageInfo(); })
+      .catch((e) => {
+        log(e.message, 'ERROR');
+        setStatus('Could not load the release firmware. You can still flash a custom file.', 'error');
+      });
+  </script>
+</body>
+</html>
