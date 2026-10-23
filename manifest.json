@@ -1,6 +1,6 @@
 {
   "name": "DCLK Dual MIDI Clock Firmware",
-  "version": "v1.1",
+  "version": "v1.2",
   "builds": [
     {
       "chipFamily": "STM32F411",
