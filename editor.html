@@ -5,215 +5,173 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>DCLK Editor</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&display=swap">
+<link rel="preload" href="assets/fonts/alagard.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/silkscreen-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="theme.css">
 <style>
-  /* Layout: one centred card like the DCLK Web Flasher; a live "OLED" strip up top,
-     then the settings grouped the way the panel's MIDI / LEDS / SCREEN menus are. */
-  :root {
-    --bg: #0d1117;
-    --card: #161b22;
-    --well: #0b0f14;
-    --raised: #21262d;
-    --line: #30363d;
-    --fg: #c9d1d9;
-    --head: #f0f6fc;
-    --muted: #8b949e;
-    --accent: #2f81f7;
-    --accent-soft: rgba(47,129,247,0.12);
-    --led: #ff9a3c;            /* DCLK's orange LEDs */
-    --led-dim: rgba(255,154,60,0.18);
-    --ok: #3fb950;
-    --warn: #f2cc60;
-    --warn-bg: #271e13;
-    --warn-line: #845306;
-    --bad: #f85149;
-    --oled-bg: #000;
-    --oled-fg: #dfe9ff;
-    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-    --pixel: "Silkscreen", var(--mono);
-    color-scheme: dark;
+  /* Editor layout. The top "deck" is a small copy of DCLK's front panel: the
+     128x32 screen (drawn pixel for pixel like the firmware), a bar ruler above
+     it, and the CH1 / CH2 touch buttons sitting on a clock trace. Settings
+     below are grouped like the panel's MIDI / LEDS / SCREEN menus. */
+
+  /* ---------- connection ---------- */
+  .conn { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px; padding: 14px 16px; }
+  .conn-status { display: flex; align-items: center; gap: 14px; flex: 1 1 260px; min-width: 0; }
+  .conn-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .conn-title { font-family: var(--label); font-size: 16px; line-height: 1.2; text-transform: uppercase; }
+  .conn-detail { font-size: 16px; line-height: 1.35; overflow-wrap: anywhere; }
+  .conn-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  /* ---------- deck ---------- */
+  .deck { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px 22px; align-items: end; }
+  .ruler { grid-column: 1; display: flex; align-items: center; height: 16px; padding: 0 6px; }
+  .ruler i {
+    flex: none; width: 12px; height: 12px; border: 2px solid var(--ink);
+    clip-path: polygon(2px 0, 10px 0, 12px 2px, 12px 10px, 10px 12px, 2px 12px, 0 10px, 0 2px);
+  }
+  .ruler i.on { background: var(--ink); }
+  .ruler b { flex: 1 1 0; min-width: 4px; height: 2px; margin: 0 4px; background: repeating-linear-gradient(90deg, var(--ink) 0 2px, transparent 2px 8px); }
+  .ruler-key { grid-column: 2; font-family: var(--label); font-size: 16px; line-height: 1; text-transform: uppercase; align-self: center; }
+
+  .screen { grid-column: 1; padding: 14px; display: flex; justify-content: center; align-items: center; min-height: 92px; }
+  .screen canvas { display: block; width: 384px; height: 96px; max-width: 100%; }
+  .readouts { grid-column: 2; display: flex; flex-direction: column; gap: 14px; align-self: stretch; justify-content: center; min-width: 120px; }
+  .ro { display: flex; flex-direction: column; gap: 4px; }
+  .ro-k { font-family: var(--label); font-size: 16px; line-height: 1; text-transform: uppercase; }
+  .ro-v { font-family: var(--label); font-size: 32px; line-height: 1; white-space: nowrap; text-transform: uppercase; }
+  @media (max-width: 600px) {
+    .deck { grid-template-columns: minmax(0, 1fr); }
+    .ruler-key { display: none; }
+    .readouts { grid-column: 1; flex-direction: row; flex-wrap: wrap; gap: 10px 28px; min-width: 0; }
   }
 
-  * { box-sizing: border-box; }
-  [hidden] { display: none !important; }
-  body {
-    background: var(--bg);
-    color: var(--fg);
-    font-family: var(--font);
-    font-size: 15px;
-    line-height: 1.55;
-    padding-block: 32px 48px;
-    padding-left: max(16px, env(safe-area-inset-left, 0px));
-    padding-right: max(16px, env(safe-area-inset-right, 0px));
-  }
-  .wrap {
-    max-width: 720px;
-    margin: 0 auto;
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-    padding: 28px;
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-  }
-  @media (max-width: 520px) { .wrap { padding: 20px 16px; } }
+  .chans { grid-column: 1 / -1; display: flex; align-items: flex-start; margin-top: 10px; }
+  .chans > .seg-pulses { flex: 1 1 auto; min-width: 24px; height: 24px; margin-top: 13px; background: var(--wave) repeat-x left bottom; }
+  .chans > .seg-flat { flex: 0 0 32px; height: 2px; margin-top: 35px; background: var(--ink); }
+  .chans > .seg-flat.grow { flex: 1 1 auto; min-width: 16px; }
+  .chans > .node { flex: none; width: 8px; height: 8px; margin-top: 32px; background: var(--ink); clip-path: polygon(2px 0, 6px 0, 8px 2px, 8px 6px, 6px 8px, 2px 8px, 0 6px, 0 2px); }
+  .seg-pulses.moving { animation: wave-scroll var(--beat, 500ms) steps(12) infinite; }
+  @keyframes wave-scroll { to { background-position-x: -24px; } }
 
-  header { display: flex; flex-direction: column; gap: 4px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
-  .back-link { align-self: flex-start; font-size: 0.88rem; color: var(--muted); text-decoration: none; margin-bottom: -12px; }
-  .back-link:hover { color: var(--accent); }
-  .brand { font-size: 0.8rem; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--accent); }
-  h1 { margin: 0; color: var(--head); font-size: 1.75rem; font-weight: 600; text-wrap: balance; }
-  .sub { margin: 0; color: var(--muted); font-size: 0.95rem; }
-
-  /* ---------- connection bar ---------- */
-  .conn {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px;
-    padding: 14px 16px; background: var(--well); border: 1px solid var(--line); border-radius: 8px;
+  .chan { flex: 0 0 168px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+  .ring {
+    width: 72px; height: 72px; padding: 0; border: 0; border-radius: 50%; flex: none;
+    background: var(--ring) center / 72px 72px no-repeat; color: var(--ink);
+    display: grid; place-items: center;
   }
-  .conn-status { display: flex; align-items: center; gap: 10px; flex: 1 1 240px; min-width: 0; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
-  .dot.on { background: var(--ok); box-shadow: 0 0 0 3px rgba(63,185,80,0.2); }
-  .dot.demo { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-  .dot.err { background: var(--bad); }
-  .conn-text { display: flex; flex-direction: column; min-width: 0; }
-  .conn-title { color: var(--head); font-weight: 600; font-size: 0.95rem; }
-  .conn-detail { color: var(--muted); font-size: 0.82rem; overflow-wrap: anywhere; }
-  .conn-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-
-  button { font: inherit; cursor: pointer; }
-  .btn {
-    background: var(--raised); color: var(--head); border: 1px solid var(--line);
-    padding: 7px 14px; border-radius: 6px; font-size: 0.88rem; font-weight: 500;
+  .ring:disabled { opacity: 0.45; cursor: not-allowed; }
+  .ring:focus-visible { outline-offset: 4px; }
+  .ring .ico { width: 16px; height: 16px; background: currentColor; -webkit-mask: var(--ico) center / contain no-repeat; mask: var(--ico) center / contain no-repeat; }
+  .ring[data-ico="play"] { --ico: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' shape-rendering='crispEdges'><path d='M2 0h4v2h2v2h2v2h2v4h-2v2h-2v2h-2v2h-4z'/></svg>"); }
+  .ring[data-ico="stop"] { --ico: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' shape-rendering='crispEdges'><path d='M2 2h12v12h-12z'/></svg>"); }
+  .ring[data-ico="cancel"] { --ico: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' shape-rendering='crispEdges'><path d='M0 0h4v2h2v2h4v-2h2v-2h4v4h-2v2h-2v4h2v2h2v4h-4v-2h-2v-2h-4v2h-2v2h-4v-4h2v-2h2v-4h-2v-2h-2z'/></svg>"); }
+  .ring:hover:not(:disabled) .ico { transform: scale(1.25); }
+  .ring.run { background-image: var(--ring-fill); color: var(--paper); }
+  .ring.wait { animation: ring-breathe 1.4s steps(1) infinite; }
+  .ring.stopping { background-image: var(--ring-fill); color: var(--paper); animation: ring-blink 0.5s steps(1) infinite; }
+  @keyframes ring-breathe { 0%, 49% { background-image: var(--ring); color: var(--ink); } 50%, 100% { background-image: var(--ring-fill); color: var(--paper); } }
+  @keyframes ring-blink { 0%, 49% { background-image: var(--ring-fill); color: var(--paper); } 50%, 100% { background-image: var(--ring); color: var(--ink); } }
+  @media (prefers-reduced-motion: reduce) { .ring.wait { background-image: var(--ring-fill); color: var(--paper); } }
+  .chan-name { font-family: var(--label); font-size: 16px; line-height: 1; text-transform: uppercase; }
+  .chan-state { font-size: 16px; line-height: 1.3; min-height: 2.6em; text-wrap: balance; }
+  @media (max-width: 600px) {
+    .chan { flex-basis: 112px; }
+    .chans > .seg-flat { flex-basis: 12px; }
   }
-  .btn:hover:not(:disabled) { background: #30363d; }
-  .btn.primary { background: #238636; border-color: rgba(255,255,255,0.1); color: #fff; font-weight: 600; }
-  .btn.primary:hover:not(:disabled) { background: #2ea043; }
-  .btn.danger { color: var(--bad); }
-  .btn.danger.armed { background: var(--bad); color: #fff; border-color: var(--bad); }
-  .btn:disabled { color: var(--muted); cursor: not-allowed; opacity: 0.7; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-  .notice {
-    padding: 12px 16px; border-radius: 8px; font-size: 0.88rem;
-    background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn);
-  }
-  .notice a { color: inherit; }
-
-  /* ---------- live panel ---------- */
-  .live { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 12px; }
-  @media (max-width: 600px) { .live { grid-template-columns: 1fr; } }
-
-  .oled {
-    background: var(--oled-bg); border: 1px solid #222a33; border-radius: 6px;
-    padding: 16px 18px 14px; display: flex; flex-direction: column; justify-content: space-between; gap: 14px;
-    box-shadow: inset 0 0 24px rgba(120,160,255,0.06);
-  }
-  .oled-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-  .oled-bpm { font-family: var(--pixel); color: var(--oled-fg); font-size: 2.6rem; line-height: 1; letter-spacing: 1px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .oled-src { font-family: var(--pixel); color: var(--oled-fg); opacity: 0.6; font-size: 0.75rem; letter-spacing: 1px; }
-  .beats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; height: 10px; align-items: start; }
-  .beats span { height: 5px; background: var(--oled-fg); opacity: 0.85; transition: transform 60ms linear; }
-  .beats span.on { transform: translateY(5px); opacity: 1; }
-  .oled-meta { font-family: var(--pixel); font-size: 0.7rem; color: var(--oled-fg); opacity: 0.55; letter-spacing: 1px; }
-
-  .chans { display: grid; grid-template-rows: 1fr 1fr; gap: 12px; }
-  .chan {
-    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px;
-    padding: 12px 14px; background: var(--well); border: 1px solid var(--line); border-radius: 8px;
-  }
-  .lamp { width: 14px; height: 14px; border-radius: 50%; background: var(--led-dim); border: 1px solid rgba(255,154,60,0.35); }
-  .lamp.run { background: var(--led); box-shadow: 0 0 10px var(--led); }
-  .lamp.wait { animation: breathe 1.4s ease-in-out infinite; }
-  .lamp.stopping { animation: blink 0.5s steps(2, jump-none) infinite; }
-  @keyframes breathe { 0%,100% { background: var(--led-dim); box-shadow: none; } 50% { background: var(--led); box-shadow: 0 0 8px var(--led); } }
-  @keyframes blink { 0% { background: var(--led); } 100% { background: var(--led-dim); } }
-  @media (prefers-reduced-motion: reduce) { .lamp.wait, .lamp.stopping { animation: none; background: var(--led); opacity: 0.6; } .beats span { transition: none; } }
-  .chan-name { color: var(--head); font-weight: 600; font-size: 0.95rem; }
-  .chan-state { color: var(--muted); font-size: 0.82rem; }
-  .chan .btn { min-width: 86px; }
 
   /* ---------- settings ---------- */
   fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
-  fieldset:disabled .group { opacity: 0.55; }
-  .groups { display: flex; flex-direction: column; gap: 24px; }
-  .group { display: flex; flex-direction: column; gap: 4px; }
-  .group-title {
-    margin: 0 0 6px; font-size: 0.78rem; font-weight: 600; color: var(--muted);
-    text-transform: uppercase; letter-spacing: 0.8px;
-  }
+  fieldset:disabled .group { opacity: 0.45; }
+  .groups { display: flex; flex-direction: column; gap: 30px; }
+  .group { display: flex; flex-direction: column; }
   .row {
-    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 20px; align-items: center;
-    padding: 12px 0; border-top: 1px solid var(--line);
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 24px; align-items: center;
+    padding: 16px 0;
+    background: repeating-linear-gradient(90deg, var(--ink) 0 2px, transparent 2px 6px) top left / 100% 2px no-repeat;
   }
-  .group .row:first-of-type { border-top: 0; padding-top: 4px; }
+  .group .row:first-of-type { background: none; padding-top: 6px; }
   .row > .seg, .row > .switch, .row > .tempo, .row > .readout { justify-self: end; }
-  @media (max-width: 600px) { .row { grid-template-columns: 1fr; } .row > .seg, .row > .switch, .row > .tempo, .row > .readout { justify-self: start; } }
-  .label { color: var(--head); font-weight: 500; font-size: 0.95rem; }
-  .hint { color: var(--muted); font-size: 0.83rem; }
-  .panel-name { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; margin-left: 6px; white-space: nowrap; }
+  @media (max-width: 680px) { .row { grid-template-columns: 1fr; } .row > .seg, .row > .switch, .row > .tempo, .row > .readout { justify-self: start; } .seg { justify-content: flex-start; } }
+  .label { font-weight: 600; font-size: 18px; line-height: 1.3; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+  .hint { font-size: 16px; line-height: 1.4; margin-top: 4px; max-width: 46ch; }
+  .panel-name { font-weight: 400; }
 
-  .seg { display: inline-flex; flex-wrap: wrap; background: var(--well); border: 1px solid var(--line); border-radius: 7px; padding: 3px; gap: 2px; }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
   .seg label { position: relative; }
   .seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
   .seg span {
-    display: block; padding: 5px 12px; border-radius: 5px; font-size: 0.86rem; color: var(--fg);
-    font-variant-numeric: tabular-nums; white-space: nowrap;
+    display: block; min-width: 44px; padding: 10px 11px 9px; text-align: center;
+    font-family: var(--label); font-size: 16px; line-height: 1; text-transform: uppercase; white-space: nowrap;
+    border: 2px solid transparent; border-image: var(--px-dots) 8 / 8px round;
   }
-  .seg input:checked + span { background: var(--accent); color: #fff; font-weight: 600; }
-  .seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .seg input:disabled + span { color: var(--muted); }
-  .seg label:hover input:not(:checked):not(:disabled) + span { background: var(--raised); }
+  .seg label:hover input:not(:checked):not(:disabled) + span { border-image: var(--px-frame) 8 / 8px round; }
+  .seg input:checked + span { border-image: var(--px-fill) 8 fill / 8px round; color: var(--paper); }
+  .seg input:focus-visible + span { outline: 2px dashed var(--ink); outline-offset: 3px; }
+  .seg input:disabled + span { opacity: 0.4; text-decoration: line-through; text-decoration-thickness: 2px; }
 
-  .switch { position: relative; display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.88rem; }
+  .switch { position: relative; display: inline-flex; align-items: center; gap: 12px; cursor: pointer; font-family: var(--label); font-size: 16px; line-height: 1; text-transform: uppercase; }
   .switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-  .switch .track { width: 40px; height: 22px; border-radius: 11px; background: var(--raised); border: 1px solid var(--line); position: relative; transition: background 0.15s; }
-  .switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: transform 0.15s, background 0.15s; }
-  .switch input:checked + .track { background: var(--accent); border-color: var(--accent); }
-  .switch input:checked + .track::after { transform: translateX(18px); background: #fff; }
-  .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .switch .track { width: 56px; height: 32px; position: relative; border: 2px solid transparent; border-image: var(--px-frame) 8 / 8px round; }
+  .switch .track::after { content: ""; position: absolute; top: 6px; left: 6px; width: 16px; height: 16px; background: var(--ink); transition: transform 90ms steps(3); }
+  .switch input:checked + .track { border-image: var(--px-fill) 8 fill / 8px round; }
+  .switch input:checked + .track::after { background: var(--paper); transform: translateX(24px); }
+  .switch input:focus-visible + .track { outline: 2px dashed var(--ink); outline-offset: 3px; }
+  #stopqText { min-width: 3ch; }
 
   .tempo { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .tempo input[type="range"] { width: 200px; max-width: 100%; accent-color: var(--accent); }
-  .tempo input[type="number"] {
-    width: 76px; background: var(--well); color: var(--head); border: 1px solid var(--line);
-    border-radius: 6px; padding: 6px 8px; font-family: var(--mono); font-size: 0.95rem; text-align: right;
+  .tempo input[type="range"] {
+    -webkit-appearance: none; appearance: none; width: 220px; max-width: 100%; height: 32px; margin: 0; cursor: pointer;
+    background:
+      linear-gradient(var(--ink), var(--ink)) center / 100% 2px no-repeat,
+      repeating-linear-gradient(90deg, var(--ink) 0 2px, transparent 2px 10px) left bottom / 100% 6px no-repeat;
   }
-  .step { width: 32px; height: 32px; padding: 0; }
+  .tempo input[type="range"]::-webkit-slider-runnable-track { background: transparent; height: 32px; }
+  .tempo input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 24px; margin-top: 4px; background: var(--ink); border: 0; border-radius: 0; box-shadow: 0 0 0 2px var(--paper); }
+  .tempo input[type="range"]::-moz-range-track { background: transparent; }
+  .tempo input[type="range"]::-moz-range-thumb { width: 12px; height: 24px; background: var(--ink); border: 0; border-radius: 0; box-shadow: 0 0 0 2px var(--paper); }
+  .tempo input[type="number"] { width: 84px; text-align: right; font-size: 28px; -moz-appearance: textfield; }
+  .tempo input[type="number"]::-webkit-inner-spin-button, .tempo input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .step { width: 40px; padding: 0; font-size: 16px; }
 
-  .readout { font-family: var(--mono); color: var(--head); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
-  .readout.none { color: var(--muted); }
+  .readout { font-family: var(--display); font-size: 32px; line-height: 1; white-space: nowrap; }
+  .readout.none { font-family: var(--label); font-size: 16px; opacity: 0.6; }
+  .group .callout { margin-top: 10px; font-size: 16px; }
 
-  .callout { font-size: 0.85rem; color: var(--fg); background: var(--accent-soft); border: 1px solid rgba(47,129,247,0.35); border-radius: 6px; padding: 8px 12px; }
+  /* ---------- footer ---------- */
+  .save { display: flex; align-items: center; gap: 10px; text-transform: uppercase; }
+  .save .led { display: none; }
+  .save.pending .led, .save.ok .led { display: block; }
+  .save.ok .led { background: var(--ink); }
+  .save.pending .led { background: repeating-conic-gradient(var(--ink) 0 25%, transparent 0 50%) 0 0 / 4px 4px; animation: px-blink 1s steps(1) infinite; }
+  .reset { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
-  footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: center; padding-top: 20px; border-top: 1px solid var(--line); }
-  .save { font-size: 0.85rem; color: var(--muted); display: flex; align-items: center; gap: 8px; }
-  .save.pending { color: var(--warn); }
-  .save.ok { color: var(--ok); }
-  .reset { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-
-  details { font-size: 0.88rem; color: var(--muted); }
-  details summary { cursor: pointer; color: var(--fg); }
-  details ul { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
-  details a, .links a { color: var(--accent); }
-  .links { font-size: 0.85rem; color: var(--muted); }
+  .help ul { margin: 14px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 16px; }
+  .help li { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; }
+  .help li::before { content: ""; width: 6px; height: 6px; margin: 8px 0 0 6px; background: var(--ink); }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <a class="back-link" href="./">&lsaquo; All tools</a>
-  <header>
-    <div class="brand">.axs instruments</div>
-    <h1>DCLK Editor</h1>
-    <p class="sub">Change every DCLK setting over USB. Plug DCLK into this computer, then connect.</p>
+<main class="panel">
+  <header class="plate">
+    <a class="back-link" href="./">&lt; All tools</a>
+    <div class="plate-top">
+      <div class="wordmark">
+        <div class="brand">.axs instruments</div>
+        <h1><span class="logo">DCLK</span> <span class="tool-tag">Editor</span></h1>
+        <p class="logo-sub">Dual-MIDI Clock</p>
+      </div>
+    </div>
+    <div class="trace" aria-hidden="true">
+      <span class="node"></span><span class="pulses"></span>
+      <span class="flat walker-spot"><img class="walker px" id="walker" src="assets/walker.png" width="31" height="59" alt=""></span>
+      <span class="pulses short"></span><span class="flat end"></span><span class="node"></span>
+    </div>
+    <p class="sub">Change every DCLK setting over USB. Plug DCLK into this computer, then&nbsp;connect.</p>
   </header>
 
-  <section class="conn" aria-live="polite">
+  <section class="conn frame" aria-live="polite">
     <div class="conn-status">
-      <span class="dot" id="dot"></span>
+      <span class="led" id="dot"></span>
       <div class="conn-text">
         <span class="conn-title" id="connTitle">Not connected</span>
         <span class="conn-detail" id="connDetail">Needs Chrome or Edge on a computer, and DCLK firmware 1.3 or later.</span>
@@ -227,26 +185,30 @@
 
   <div class="notice" id="notice" hidden></div>
 
-  <section class="live" aria-label="Live status">
-    <div class="oled" aria-hidden="true">
-      <div class="oled-top">
-        <span class="oled-bpm" id="oledBpm">BPM: 120</span>
-        <span class="oled-src" id="oledSrc">INT</span>
-      </div>
-      <div class="beats" id="beats"><span></span><span></span><span></span><span></span></div>
-      <div class="oled-meta" id="oledMeta">BAR 1/4</div>
+  <section class="deck" aria-label="Live status">
+    <div class="ruler" id="ruler" aria-hidden="true"></div>
+    <span class="ruler-key" aria-hidden="true">Bars</span>
+    <div class="screen frame-double">
+      <canvas class="px" id="oled" width="128" height="32" role="img" aria-label="DCLK screen"></canvas>
+    </div>
+    <div class="readouts">
+      <div class="ro"><span class="ro-k">Clock</span><span class="ro-v" id="oledSrc">INT</span></div>
+      <div class="ro"><span class="ro-k">Bar</span><span class="ro-v" id="oledMeta">1/4</span></div>
     </div>
     <div class="chans">
+      <span class="seg-pulses" id="wave"></span>
       <div class="chan">
-        <span class="lamp" id="lamp0"></span>
-        <div class="conn-text"><span class="chan-name">MIDI OUT 1</span><span class="chan-state" id="state0">Stopped</span></div>
-        <button class="btn" id="play0" type="button" disabled>Start</button>
+        <button class="ring" id="play0" type="button" data-ico="play" aria-label="Start MIDI OUT 1" disabled><span class="ico"></span></button>
+        <span class="chan-name">CH1 &middot; Out 1</span>
+        <span class="chan-state" id="state0">Stopped</span>
       </div>
+      <span class="seg-flat"></span>
       <div class="chan">
-        <span class="lamp" id="lamp1"></span>
-        <div class="conn-text"><span class="chan-name">MIDI OUT 2</span><span class="chan-state" id="state1">Stopped</span></div>
-        <button class="btn" id="play1" type="button" disabled>Start</button>
+        <button class="ring" id="play1" type="button" data-ico="play" aria-label="Start MIDI OUT 2" disabled><span class="ico"></span></button>
+        <span class="chan-name">CH2 &middot; Out 2</span>
+        <span class="chan-state" id="state1">Stopped</span>
       </div>
+      <span class="seg-flat grow"></span><span class="node"></span>
     </div>
   </section>
 
@@ -254,9 +216,9 @@
     <div class="groups">
 
       <section class="group" aria-labelledby="gClock">
-        <h2 class="group-title" id="gClock">Clock</h2>
+        <h2 class="section-head" id="gClock">Clock</h2>
         <div class="row">
-          <div><div class="label">Clock source <span class="panel-name">CLK SRC</span></div>
+          <div><div class="label">Clock source <span class="chip panel-name">CLK SRC</span></div>
             <div class="hint" id="srcHint">DCLK runs its own tempo.</div></div>
           <div class="seg" role="radiogroup" aria-label="Clock source">
             <label><input type="radio" name="src" id="src0" value="0" checked><span>Internal</span></label>
@@ -267,10 +229,10 @@
         <div class="row" id="rowTempo">
           <div><div class="label">Tempo</div><div class="hint">30 to 300 BPM, 24 PPQN.</div></div>
           <div class="tempo">
-            <button class="btn step" id="bpmDown" type="button" aria-label="Tempo down">−</button>
+            <button class="btn step" id="bpmDown" type="button" aria-label="Tempo down">-</button>
             <input type="range" id="bpmRange" min="30" max="300" value="120" aria-label="Tempo">
             <button class="btn step" id="bpmUp" type="button" aria-label="Tempo up">+</button>
-            <input type="number" id="bpmNum" min="30" max="300" value="120" aria-label="Tempo in BPM">
+            <input class="field" type="number" id="bpmNum" min="30" max="300" value="120" aria-label="Tempo in BPM">
           </div>
         </div>
 
@@ -280,7 +242,7 @@
         </div>
 
         <div class="row" id="rowTpt" hidden>
-          <div><div class="label">Host transport <span class="panel-name">EXT TPT</span></div>
+          <div><div class="label">Host transport <span class="chip panel-name">EXT TPT</span></div>
             <div class="hint" id="tptHint"></div></div>
           <div class="seg" role="radiogroup" aria-label="Host transport">
             <label><input type="radio" name="tpt" id="tpt1" value="1" checked><span>Follow host</span></label>
@@ -292,45 +254,45 @@
       </section>
 
       <section class="group" aria-labelledby="gStart">
-        <h2 class="group-title" id="gStart">Start and stop</h2>
+        <h2 class="section-head" id="gStart">Start &amp; stop</h2>
         <div class="row">
-          <div><div class="label">Wait length <span class="panel-name">WAIT LEN</span></div>
+          <div><div class="label">Wait length <span class="chip panel-name">WAIT LEN</span></div>
             <div class="hint">Outputs start on the next boundary of this many bars.</div></div>
           <div class="seg" role="radiogroup" aria-label="Wait length in bars" id="segWait"></div>
         </div>
         <div class="row">
-          <div><div class="label">Quantised stop <span class="panel-name">STOP Q</span></div>
+          <div><div class="label">Quantised stop <span class="chip panel-name">STOP Q</span></div>
             <div class="hint">On: a stop waits for the same boundary. Off: stops right away.</div></div>
           <label class="switch"><input type="checkbox" id="stopq"><span class="track"></span><span id="stopqText">Off</span></label>
         </div>
       </section>
 
       <section class="group" aria-labelledby="gOut">
-        <h2 class="group-title" id="gOut">Outputs</h2>
+        <h2 class="section-head" id="gOut">Outputs</h2>
         <div class="row">
-          <div><div class="label">MIDI OUT 1 divide <span class="panel-name">CH1 DIV</span></div>
+          <div><div class="label">MIDI OUT 1 divide <span class="chip panel-name">CH1 DIV</span></div>
             <div class="hint" id="div1Hint"></div></div>
           <div class="seg" role="radiogroup" aria-label="MIDI OUT 1 clock divide" id="segDiv1"></div>
         </div>
         <div class="row">
-          <div><div class="label">MIDI OUT 2 divide <span class="panel-name">CH2 DIV</span></div>
+          <div><div class="label">MIDI OUT 2 divide <span class="chip panel-name">CH2 DIV</span></div>
             <div class="hint" id="div2Hint"></div></div>
           <div class="seg" role="radiogroup" aria-label="MIDI OUT 2 clock divide" id="segDiv2"></div>
         </div>
         <div class="row">
-          <div><div class="label">USB clock out follows <span class="panel-name">USB OUT</span></div>
+          <div><div class="label">USB clock out follows <span class="chip panel-name">USB OUT</span></div>
             <div class="hint" id="usbHint">The USB host gets the same clock as this output, divider included.</div></div>
           <div class="seg" role="radiogroup" aria-label="USB clock out follows">
-            <label><input type="radio" name="usb" id="usb0" value="0" checked><span>OUT 1</span></label>
-            <label><input type="radio" name="usb" id="usb1" value="1"><span>OUT 2</span></label>
+            <label><input type="radio" name="usb" id="usb0" value="0" checked><span>Out 1</span></label>
+            <label><input type="radio" name="usb" id="usb1" value="1"><span>Out 2</span></label>
           </div>
         </div>
       </section>
 
       <section class="group" aria-labelledby="gUnit">
-        <h2 class="group-title" id="gUnit">Panel</h2>
+        <h2 class="section-head" id="gUnit">Panel</h2>
         <div class="row">
-          <div><div class="label">LED brightness <span class="panel-name">LEDS</span></div>
+          <div><div class="label">LED brightness <span class="chip panel-name">LEDS</span></div>
             <div class="hint">CH1, CH2 and BEAT LEDs.</div></div>
           <div class="seg" role="radiogroup" aria-label="LED brightness">
             <label><input type="radio" name="led" id="led0" value="0"><span>Low</span></label>
@@ -339,7 +301,7 @@
           </div>
         </div>
         <div class="row">
-          <div><div class="label">Screen saver <span class="panel-name">SAVER</span></div>
+          <div><div class="label">Screen saver <span class="chip panel-name">SAVER</span></div>
             <div class="hint">After this long without input the screen dims while a clock runs, or switches off when stopped.</div></div>
           <div class="seg" role="radiogroup" aria-label="Screen saver" id="segSaver"></div>
         </div>
@@ -347,15 +309,15 @@
     </div>
   </fieldset>
 
-  <footer>
-    <div class="save" id="save">Connect to see DCLK's settings.</div>
+  <footer class="foot">
+    <div class="save" id="save"><span class="led"></span><span id="saveText">Connect to see DCLK's settings</span></div>
     <div class="reset">
       <button class="btn danger" id="btnReset" type="button" disabled>Reset to defaults</button>
       <button class="btn" id="btnResetCancel" type="button" hidden>Cancel</button>
     </div>
   </footer>
 
-  <details>
+  <details class="px-details help">
     <summary>Can't connect?</summary>
     <ul>
       <li>Use Chrome or Edge on a computer. Safari and phones don't support Web MIDI.</li>
@@ -365,7 +327,7 @@
       <li>Previews embedded in another site may be blocked from MIDI devices. Open this page directly in its own tab.</li>
     </ul>
   </details>
-</div>
+</main>
 
 <script>
 (() => {
@@ -514,8 +476,9 @@
   const ui = {
     dot: $('dot'), title: $('connTitle'), detail: $('connDetail'), notice: $('notice'),
     connect: $('btnConnect'), demo: $('btnDemo'), settings: $('settings'),
-    oledBpm: $('oledBpm'), oledSrc: $('oledSrc'), oledMeta: $('oledMeta'), beats: [...$('beats').children],
-    bpmRange: $('bpmRange'), bpmNum: $('bpmNum'), save: $('save'), reset: $('btnReset'), resetCancel: $('btnResetCancel'),
+    oledSrc: $('oledSrc'), oledMeta: $('oledMeta'), ruler: $('ruler'), wave: $('wave'), walker: $('walker'),
+    bpmRange: $('bpmRange'), bpmNum: $('bpmNum'), save: $('save'), saveText: $('saveText'),
+    reset: $('btnReset'), resetCancel: $('btnResetCancel'),
   };
 
   function buildSeg(container, name, values, label) {
@@ -527,6 +490,55 @@
   buildSeg($('segDiv2'), 'div2', DIVS, v => `/${v}`);
   buildSeg($('segSaver'), 'saver', SAVERS, v => v === 0 ? 'Off' : `${v} min`);
 
+  // ---------------- OLED: a 128x32 copy of DCLK's SSD1306 main screen ----------------
+  // Picopixel from the Adafruit GFX Library, the same bitmaps the firmware draws with.
+  const PICO_BMP = 'e8b457d5f5004e3e80a54a4a5a50c06a409580aa805d0060e080254856d47540c54ec51c9792f31c5354e54855545594a04664e38098c50456c657dad75c7246d6dcf3cef34872d4b7daf824d4bb5a924e8eeb58809db99056d4d74856d440d75a711ce924b6d4b6a48c6b5500b55ab524e54eeac09112d5c054f090c7f0935e718025de5e306e80779c935ab8456092eaaa40d56ad6805500d7407590e871e0ba40b580b5008d54aa80ace0e5706a26fcc8ac5a';
+  const PICO_GLY = [0,0,0,2,0,1,0,1,5,2,0,-4,1,3,2,4,0,-4,2,5,5,6,0,-4,6,3,6,4,0,-4,9,3,5,4,0,-4,11,4,5,5,0,-4,14,1,2,2,0,-4,15,2,5,3,0,-4,17,2,5,3,0,-4,19,3,3,4,0,-3,21,3,3,4,0,-3,23,2,2,3,0,0,24,3,1,4,0,-2,25,1,1,2,0,0,26,3,5,4,0,-4,28,3,5,4,0,-4,30,2,5,3,0,-4,32,3,5,4,0,-4,34,3,5,4,0,-4,36,3,5,4,0,-4,38,3,5,4,0,-4,40,3,5,4,0,-4,42,3,5,4,0,-4,44,3,5,4,0,-4,46,3,5,4,0,-4,48,1,3,2,0,-3,49,2,4,3,0,-3,50,2,3,3,0,-3,51,3,3,4,0,-3,53,2,3,3,0,-3,54,3,5,4,0,-4,56,3,5,4,0,-4,58,3,5,4,0,-4,60,3,5,4,0,-4,62,3,5,4,0,-4,64,3,5,4,0,-4,66,3,5,4,0,-4,68,3,5,4,0,-4,70,3,5,4,0,-4,72,3,5,4,0,-4,74,1,5,2,0,-4,75,3,5,4,0,-4,77,3,5,4,0,-4,79,3,5,4,0,-4,81,5,5,6,0,-4,85,4,5,5,0,-4,88,3,5,4,0,-4,90,3,5,4,0,-4,92,3,6,4,0,-4,95,3,5,4,0,-4,97,3,5,4,0,-4,99,3,5,4,0,-4,101,3,5,4,0,-4,103,3,5,4,0,-4,105,5,5,6,0,-4,109,3,5,4,0,-4,111,3,5,4,0,-4,113,3,5,4,0,-4,115,2,5,3,0,-4,117,3,5,4,0,-4,119,2,5,3,0,-4,121,3,2,4,0,-4,122,4,1,4,0,1,123,2,2,3,0,-4,124,3,4,4,0,-3,126,3,5,4,0,-4,128,3,3,4,0,-2,130,3,5,4,0,-4,132,3,4,4,0,-3,134,2,5,3,0,-4,136,3,5,4,0,-3,138,3,5,4,0,-4,140,1,5,2,0,-4,141,2,6,3,0,-4,143,3,5,4,0,-4,145,2,5,3,0,-4,147,5,3,6,0,-2,149,3,3,4,0,-2,151,3,3,4,0,-2,153,3,4,4,0,-2,155,3,4,4,0,-2,157,2,3,3,0,-2,158,3,4,4,0,-3,160,2,5,3,0,-4,162,3,3,4,0,-2,164,3,3,4,0,-2,166,5,3,6,0,-2,168,3,3,4,0,-2,170,3,4,4,0,-2,172,3,4,4,0,-3,174,3,5,4,0,-4,176,1,6,2,0,-4,177,3,5,4,0,-4,179,4,2,5,0,-3];
+  const PICO = Uint8Array.from(PICO_BMP.replace(/\s/g, '').match(/../g), h => parseInt(h, 16));
+  const oled = $('oled'), octx = oled.getContext('2d');
+
+  // Same rules as Adafruit_GFX::drawChar / print for a custom font.
+  function gfxText(str, x, y, size, draw = true) {
+    for (const ch of str) {
+      const c = ch.charCodeAt(0);
+      if (c < 0x20 || c > 0x7E) continue;
+      const g = (c - 0x20) * 6;
+      let bo = PICO_GLY[g];
+      const w = PICO_GLY[g + 1], h = PICO_GLY[g + 2], adv = PICO_GLY[g + 3], xo = PICO_GLY[g + 4], yo = PICO_GLY[g + 5];
+      if (draw) {
+        let bits = 0, bit = 0;
+        for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) {
+          if (!(bit++ & 7)) bits = PICO[bo++];
+          if (bits & 0x80) octx.fillRect(x + (xo + xx) * size, y + (yo + yy) * size, size, size);
+          bits = (bits << 1) & 0xFF;
+        }
+      }
+      x += adv * size;
+    }
+    return x;
+  }
+  let oledKey = '';
+  function drawOled(text, activeBar, centred) {
+    const key = text + '|' + activeBar + '|' + centred;
+    if (key === oledKey) return;
+    oledKey = key;
+    octx.fillStyle = '#000'; octx.fillRect(0, 0, 128, 32);
+    octx.fillStyle = '#fff';
+    const x = centred ? Math.round((128 - (gfxText(text, 0, 0, 4, false))) / 2) : 6;
+    gfxText(text, x, 22, 4);
+    for (let i = 0; i < 4; i++) octx.fillRect(i * 32 + 2, i === activeBar ? 31 : 28, 28, 4);
+  }
+
+  // Bar ruler above the screen: one dot per bar of the wait length
+  let rulerLen = 0;
+  function drawRuler(len, cur) {
+    if (len !== rulerLen) {
+      rulerLen = len;
+      ui.ruler.innerHTML = Array.from({ length: len }, (_, i) => (i ? '<b></b>' : '') + '<i></i>').join('');
+    }
+    [...ui.ruler.querySelectorAll('i')].forEach((d, i) => d.classList.toggle('on', i === cur));
+  }
+
   // ---------------- Link state ----------------
   let link = null;                 // { send(bytes), close(), name }
   let midiAccess = null;
@@ -536,11 +548,12 @@
   let draggingTempo = false;
 
   function setConn(kind, title, detail) {
-    ui.dot.className = 'dot' + (kind ? ' ' + kind : '');
+    ui.dot.className = 'led' + (kind ? ' ' + kind : '');
     ui.title.textContent = title;
     ui.detail.textContent = detail;
   }
   function showNotice(html) { ui.notice.innerHTML = html; ui.notice.hidden = !html; }
+  function setSave(kind, text) { ui.save.className = 'save' + (kind ? ' ' + kind : ''); ui.saveText.textContent = text; }
 
   function onMessage(data) {
     const d = Array.from(data);
@@ -598,7 +611,7 @@
     ui.connect.textContent = 'Connect DCLK';
     ui.demo.hidden = false; ui.demo.textContent = 'Try demo'; ui.connect.hidden = false;
     setConn('', title || 'Not connected', detail || 'Needs Chrome or Edge on a computer, and DCLK firmware 1.3 or later.');
-    ui.save.className = 'save'; ui.save.textContent = 'Connect to see DCLK’s settings.';
+    setSave('', 'Connect to see DCLK’s settings');
     render();
   }
   function lost(why) { detach('Disconnected', why); }
@@ -732,6 +745,9 @@
   const check = (id, on) => { const el = $(id); if (el && el.checked !== on) el.checked = on; };
   const fmtBpm = v => (Math.round(v * 10) / 10).toFixed(1);
 
+  let lastBeat = -1, hopTimer = null;
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+
   function render() {
     const s = state;
     const src = param(P.SRC), tpt = param(P.TPT), bpm = param(P.BPM), wait = param(P.WAIT);
@@ -739,30 +755,44 @@
     const extPresent = s ? s.extPresent : false, extBpm = s ? s.extBpm : 0;
     const hostRunning = s ? s.hostRunning : false;
 
-    // OLED
-    ui.oledBpm.textContent = ext ? `EXT: ${extPresent && extBpm ? Math.round(extBpm) : '--'}` : `BPM: ${bpm}`;
-    ui.oledSrc.textContent = ext ? (hostGrid ? (hostRunning ? 'HOST PLAY' : 'HOST STOP') : 'USB FREE') : 'INT';
+    // Screen, as the firmware draws it: the beat bar only drops while an output runs
     const ticking = s && (s.run[0] || s.run[1] || (hostGrid && hostRunning));
-    ui.beats.forEach((b, i) => b.classList.toggle('on', !!ticking && s.beat === i));
-    ui.oledMeta.textContent = `BAR ${ticking ? s.bar + 1 : 1}/${wait}  ·  WAIT ${wait}`;
+    const outRunning = s && (s.run[0] || s.run[1]);
+    if (!s) drawOled('DCLK', -1, true);
+    else drawOled(ext ? `EXT: ${extPresent && extBpm ? Math.round(extBpm) : '--'}` : `BPM: ${bpm}`, outRunning ? s.beat : -1, false);
+    ui.oledSrc.textContent = !s ? '--' : ext ? (hostGrid ? (hostRunning ? 'Host play' : 'Host stop') : 'USB free') : 'Int';
+    ui.oledMeta.textContent = `${ticking ? s.bar + 1 : 1}/${wait}`;
+    drawRuler(wait, ticking ? s.bar : -1);
+
+    // Clock trace scrolls one pulse per beat while an output runs; the walker steps on the beat
+    const shownBpm = ext ? (extPresent ? extBpm : 0) : bpm;
+    ui.wave.classList.toggle('moving', !!outRunning && shownBpm > 0);
+    if (shownBpm > 0) ui.wave.style.setProperty('--beat', `${Math.round(60000 / shownBpm)}ms`);
+    const beatNow = ticking ? s.bar * 4 + s.beat : -1;
+    if (beatNow !== lastBeat) {
+      lastBeat = beatNow;
+      if (beatNow >= 0 && !reduceMotion.matches) { ui.walker.classList.add('hop'); clearTimeout(hopTimer); hopTimer = setTimeout(() => ui.walker.classList.remove('hop'), 90); }
+    }
 
     // Channels
     for (const i of [0, 1]) {
-      const lamp = $('lamp' + i), st = $('state' + i), btn = $('play' + i);
-      let cls = '', text = 'Stopped', label = 'Start';
+      const st = $('state' + i), btn = $('play' + i);
+      let cls = '', text = 'Stopped', label = 'Start', ico = 'play';
       if (s) {
         const div = param(i ? P.DIV2 : P.DIV1);
         const divText = div > 1 ? ` · /${div}` : '';
-        if (s.run[i] && s.stopPend[i]) { cls = 'stopping'; text = 'Stopping on the next boundary'; label = 'Keep going'; }
-        else if (s.run[i]) { cls = 'run'; text = 'Running' + divText; label = 'Stop'; }
+        if (s.run[i] && s.stopPend[i]) { cls = 'stopping'; text = 'Stopping on the next boundary'; label = 'Keep going'; ico = 'play'; }
+        else if (s.run[i]) { cls = 'run'; text = 'Running' + divText; label = 'Stop'; ico = 'stop'; }
         else if (s.pend[i]) {
-          cls = 'wait'; label = 'Cancel';
+          cls = 'wait'; label = 'Cancel'; ico = 'cancel';
           text = hostGrid && !hostRunning ? 'Armed, starts with the host' : `Waiting for the ${wait === 1 ? 'next bar' : wait + '-bar boundary'}`;
         }
       }
-      lamp.className = 'lamp' + (cls ? ' ' + cls : '');
+      btn.className = 'ring' + (cls ? ' ' + cls : '');
+      btn.dataset.ico = ico;
+      btn.setAttribute('aria-label', `${label} MIDI OUT ${i + 1}`);
+      btn.title = label;
       st.textContent = text;
-      btn.textContent = label;
     }
 
     // Clock source rows
@@ -815,10 +845,8 @@
 
     // Save status
     if (s) {
-      if (s.savePending) {
-        ui.save.className = 'save pending';
-        ui.save.textContent = hostGrid ? 'Changes are saved to DCLK once the host stops.' : 'Changes are saved to DCLK once every output is stopped.';
-      } else { ui.save.className = 'save ok'; ui.save.textContent = 'Saved on DCLK'; }
+      if (s.savePending) setSave('pending', hostGrid ? 'Saves once the host stops' : 'Saves once every output stops');
+      else setSave('ok', 'Saved on DCLK');
     }
   }
 

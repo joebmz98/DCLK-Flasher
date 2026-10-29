@@ -163,6 +163,29 @@ grows past 384 KB the release test fails before that becomes a problem.
 | `firmware/` | DCLK release builds |
 | `test/` | Simulated STM32F411 ROM bootloader and flasher tests (`npm test`) |
 | `test/fixtures/` | MC8P MkII binaries the library tests were built around |
+| `theme.css` | Shared 1-bit pixel theme for both pages (fonts, frames, buttons, controls) |
+| `assets/fonts/` | Self-hosted pixel fonts and their licences (`LICENSES.txt`) |
+| `assets/walker.png` | The walking character from the DCLK front panel, as a 1-bit sprite |
+
+## Look and feel
+
+Both pages follow the DCLK / MC8P MkII front panels: black and white only,
+white "silkscreen" lines on black, stepped pixel corners, a starfield and
+square-wave clock traces. One art pixel is 2 CSS px.
+
+- **Fonts:** Alagard for the wordmark and headings (the DCLK panel's own
+  lettering), Silkscreen for labels and buttons, Pixelify Sans for body text,
+  VT323 for the debug terminal. All are self-hosted, so the pages work with no
+  third-party requests. Alagard and Silkscreen are sized on their pixel grids
+  (Alagard 32/64/96 px, Silkscreen 16/32 px) to stay sharp.
+- **Frames:** `.frame`, `.frame-dots`, `.frame-double` and `.frame-fill` are
+  9-slice SVGs in `theme.css` (`--px-*`). Dotted means available, solid means
+  hover or active, filled (inverted) means selected or important.
+- **Editor screen:** the editor draws DCLK's 128x32 main screen into a canvas
+  with the Picopixel bitmaps from Adafruit GFX, the same font and layout the
+  firmware uses (`BPM: 120` at size 4, four beat bars). The CH1 / CH2 buttons
+  are the panel's double-ring touch pads: hollow when stopped, filled while
+  running, blinking while waiting for the boundary.
 
 ## Hosting
 
