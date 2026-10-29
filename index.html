@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DCLK Firmware Flasher | .axs instruments</title>
+  <title>DCLK Tools | .axs instruments</title>
   <style>
     :root {
       --bg-color: #0d1117;
@@ -250,6 +250,45 @@
     code { font-family: var(--mono); font-size: 0.85em; background: #21262d; padding: 1px 5px; border-radius: 4px; }
     a { color: var(--accent-blue); }
 
+    /* ---------- tool chooser ---------- */
+    .chooser { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
+    .chooser-intro { font-size: 0.92rem; color: var(--text-muted); margin-bottom: 4px; }
+    .tool {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      padding: 18px 20px;
+      background: #0d1117;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      color: var(--text-main);
+      text-decoration: none;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+    .tool:hover { border-color: var(--accent-blue); background: rgba(47,129,247,0.06); }
+    .tool:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+    .tool-icon {
+      width: 44px; height: 44px; border-radius: 10px;
+      display: grid; place-items: center;
+      background: #21262d; border: 1px solid var(--border-color); color: var(--accent-blue);
+    }
+    .tool-icon svg { width: 22px; height: 22px; }
+    .tool-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .tool-name { color: var(--text-heading); font-weight: 600; font-size: 1.05rem; }
+    .tool-desc { font-size: 0.9rem; }
+    .tool-meta { font-size: 0.8rem; color: var(--text-muted); }
+    .tool-chev { color: var(--text-muted); font-size: 1.4rem; line-height: 1; }
+    .tool:hover .tool-chev { color: var(--accent-blue); }
+    @media (max-width: 520px) { .tool { padding: 14px; gap: 12px; } .tool-icon { width: 38px; height: 38px; } }
+
+    .back-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 0.88rem; color: var(--text-muted); text-decoration: none;
+      margin-bottom: 16px;
+    }
+    .back-link:hover { color: var(--accent-blue); }
+
     .footer {
       border-top: 1px solid var(--border-color);
       padding-top: 16px;
@@ -269,12 +308,42 @@
     <header class="header">
       <div class="brand">.axs instruments</div>
       <h1>DCLK Dual MIDI&nbsp;Clock</h1>
-      <p class="subtitle">WebUSB / DFU Firmware&nbsp;Flasher</p>
+      <p class="subtitle" id="subtitle">Firmware updates and settings over&nbsp;USB</p>
       <div class="badge-container">
         <span class="badge">Hardware: STM32F411CEU6 Black Pill</span>
         <span class="badge" id="versionBadge">Firmware: loading&hellip;</span>
       </div>
     </header>
+
+    <nav class="chooser" id="chooser" aria-label="Choose a tool">
+      <p class="chooser-intro">What would you like to&nbsp;do?</p>
+      <a class="tool" href="#flash">
+        <span class="tool-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/></svg>
+        </span>
+        <span class="tool-text">
+          <span class="tool-name">Update firmware</span>
+          <span class="tool-desc">Install the latest DCLK release, or your own build, with DCLK in DFU&nbsp;mode.</span>
+          <span class="tool-meta">WebUSB &middot; <span id="chooserVersion">latest release</span></span>
+        </span>
+        <span class="tool-chev" aria-hidden="true">&rsaquo;</span>
+      </a>
+      <a class="tool" href="editor.html">
+        <span class="tool-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10"/><path d="M18 6h2"/><circle cx="16" cy="6" r="2"/><path d="M4 12h4"/><path d="M12 12h8"/><circle cx="10" cy="12" r="2"/><path d="M4 18h12"/><path d="M20 18h0"/><circle cx="18" cy="18" r="2"/></svg>
+        </span>
+        <span class="tool-text">
+          <span class="tool-name">Change settings</span>
+          <span class="tool-desc">Clock source, tempo, wait length, dividers, LEDs and screen saver, live while DCLK runs&nbsp;normally.</span>
+          <span class="tool-meta">Web MIDI &middot; needs firmware v1.3 or&nbsp;later</span>
+        </span>
+        <span class="tool-chev" aria-hidden="true">&rsaquo;</span>
+      </a>
+      <p class="chooser-intro">Both need Chrome or Edge on a computer and a USB&#8209;C data&nbsp;cable.</p>
+    </nav>
+
+    <div id="flasherView" hidden>
+    <a class="back-link" href="#" id="backLink">&lsaquo; All&nbsp;tools</a>
 
     <div class="warning-box">
       <strong>Requirements:</strong> Chrome or Edge on a computer (WebUSB is not available in Firefox, Safari or on iPhone). On Windows the bootloader may need a one time driver change, see Troubleshooting&nbsp;below.
@@ -357,6 +426,7 @@
       <h3>It flashed, but DCLK does not&nbsp;start</h3>
       <p>Make sure BOOT0 is released, then press NRST or unplug and replug. If you flashed a custom file, it must be built to start at <code>0x08000000</code> (no HID or UF2 bootloader offset); the flasher warns you when it is not. If it still does not start, click <em>Download Log</em> and send it to&nbsp;us.</p>
     </details>
+    </div>
 
     <footer class="footer">
       <div>&copy; .axs instruments. All rights&nbsp;reserved.</div>
@@ -380,6 +450,30 @@
     let releaseImage = null;
     let customImage = null;
     let busy = false;
+
+    // Start screen: choose the flasher (#flash) or the settings editor (editor.html)
+    function route() {
+      let flash = location.hash === '#flash';
+      if (!flash && busy) {                       // never hide a flash in progress
+        history.replaceState(null, '', '#flash');
+        flash = true;
+      }
+      $('chooser').hidden = flash;
+      $('flasherView').hidden = !flash;
+      $('subtitle').innerHTML = flash ? 'WebUSB / DFU Firmware&nbsp;Flasher' : 'Firmware updates and settings over&nbsp;USB';
+      document.title = flash ? 'DCLK Firmware Flasher | .axs instruments' : 'DCLK Tools | .axs instruments';
+    }
+    window.addEventListener('hashchange', route);
+    window.addEventListener('popstate', route);
+    $('backLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      if (busy) return;
+      history.pushState(null, '', location.pathname + location.search);
+      route();
+      window.scrollTo(0, 0);
+    });
+    window.addEventListener('beforeunload', (e) => { if (busy) { e.preventDefault(); e.returnValue = ''; } });
+    route();
 
     function log(message, type = 'INFO') {
       const time = new Date().toLocaleTimeString();
@@ -464,6 +558,7 @@
       if (!build || !build.parts || !build.parts.length) throw new DfuError('manifest.json has no firmware parts');
 
       $('versionBadge').textContent = `Firmware: ${manifest.version || '?'}`;
+      $('chooserVersion').textContent = `latest release ${manifest.version || ''}`.trim();
       $('releaseLabel').textContent = `Latest release (${manifest.version || 'unknown version'})`;
       if (manifest.video) {
         $('videoLink').href = manifest.video;

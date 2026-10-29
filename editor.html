@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>DCLK Editor</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&display=swap">
+<style>
+  /* Layout: one centred card like the DCLK Web Flasher; a live "OLED" strip up top,
+     then the settings grouped the way the panel's MIDI / LEDS / SCREEN menus are. */
+  :root {
+    --bg: #0d1117;
+    --card: #161b22;
+    --well: #0b0f14;
+    --raised: #21262d;
+    --line: #30363d;
+    --fg: #c9d1d9;
+    --head: #f0f6fc;
+    --muted: #8b949e;
+    --accent: #2f81f7;
+    --accent-soft: rgba(47,129,247,0.12);
+    --led: #ff9a3c;            /* DCLK's orange LEDs */
+    --led-dim: rgba(255,154,60,0.18);
+    --ok: #3fb950;
+    --warn: #f2cc60;
+    --warn-bg: #271e13;
+    --warn-line: #845306;
+    --bad: #f85149;
+    --oled-bg: #000;
+    --oled-fg: #dfe9ff;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    --pixel: "Silkscreen", var(--mono);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.55;
+    padding-block: 32px 48px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .wrap {
+    max-width: 720px;
+    margin: 0 auto;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  @media (max-width: 520px) { .wrap { padding: 20px 16px; } }
+
+  header { display: flex; flex-direction: column; gap: 4px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+  .back-link { align-self: flex-start; font-size: 0.88rem; color: var(--muted); text-decoration: none; margin-bottom: -12px; }
+  .back-link:hover { color: var(--accent); }
+  .brand { font-size: 0.8rem; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--accent); }
+  h1 { margin: 0; color: var(--head); font-size: 1.75rem; font-weight: 600; text-wrap: balance; }
+  .sub { margin: 0; color: var(--muted); font-size: 0.95rem; }
+
+  /* ---------- connection bar ---------- */
+  .conn {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px;
+    padding: 14px 16px; background: var(--well); border: 1px solid var(--line); border-radius: 8px;
+  }
+  .conn-status { display: flex; align-items: center; gap: 10px; flex: 1 1 240px; min-width: 0; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.on { background: var(--ok); box-shadow: 0 0 0 3px rgba(63,185,80,0.2); }
+  .dot.demo { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .dot.err { background: var(--bad); }
+  .conn-text { display: flex; flex-direction: column; min-width: 0; }
+  .conn-title { color: var(--head); font-weight: 600; font-size: 0.95rem; }
+  .conn-detail { color: var(--muted); font-size: 0.82rem; overflow-wrap: anywhere; }
+  .conn-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  button { font: inherit; cursor: pointer; }
+  .btn {
+    background: var(--raised); color: var(--head); border: 1px solid var(--line);
+    padding: 7px 14px; border-radius: 6px; font-size: 0.88rem; font-weight: 500;
+  }
+  .btn:hover:not(:disabled) { background: #30363d; }
+  .btn.primary { background: #238636; border-color: rgba(255,255,255,0.1); color: #fff; font-weight: 600; }
+  .btn.primary:hover:not(:disabled) { background: #2ea043; }
+  .btn.danger { color: var(--bad); }
+  .btn.danger.armed { background: var(--bad); color: #fff; border-color: var(--bad); }
+  .btn:disabled { color: var(--muted); cursor: not-allowed; opacity: 0.7; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .notice {
+    padding: 12px 16px; border-radius: 8px; font-size: 0.88rem;
+    background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn);
+  }
+  .notice a { color: inherit; }
+
+  /* ---------- live panel ---------- */
+  .live { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 12px; }
+  @media (max-width: 600px) { .live { grid-template-columns: 1fr; } }
+
+  .oled {
+    background: var(--oled-bg); border: 1px solid #222a33; border-radius: 6px;
+    padding: 16px 18px 14px; display: flex; flex-direction: column; justify-content: space-between; gap: 14px;
+    box-shadow: inset 0 0 24px rgba(120,160,255,0.06);
+  }
+  .oled-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .oled-bpm { font-family: var(--pixel); color: var(--oled-fg); font-size: 2.6rem; line-height: 1; letter-spacing: 1px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .oled-src { font-family: var(--pixel); color: var(--oled-fg); opacity: 0.6; font-size: 0.75rem; letter-spacing: 1px; }
+  .beats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; height: 10px; align-items: start; }
+  .beats span { height: 5px; background: var(--oled-fg); opacity: 0.85; transition: transform 60ms linear; }
+  .beats span.on { transform: translateY(5px); opacity: 1; }
+  .oled-meta { font-family: var(--pixel); font-size: 0.7rem; color: var(--oled-fg); opacity: 0.55; letter-spacing: 1px; }
+
+  .chans { display: grid; grid-template-rows: 1fr 1fr; gap: 12px; }
+  .chan {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px;
+    padding: 12px 14px; background: var(--well); border: 1px solid var(--line); border-radius: 8px;
+  }
+  .lamp { width: 14px; height: 14px; border-radius: 50%; background: var(--led-dim); border: 1px solid rgba(255,154,60,0.35); }
+  .lamp.run { background: var(--led); box-shadow: 0 0 10px var(--led); }
+  .lamp.wait { animation: breathe 1.4s ease-in-out infinite; }
+  .lamp.stopping { animation: blink 0.5s steps(2, jump-none) infinite; }
+  @keyframes breathe { 0%,100% { background: var(--led-dim); box-shadow: none; } 50% { background: var(--led); box-shadow: 0 0 8px var(--led); } }
+  @keyframes blink { 0% { background: var(--led); } 100% { background: var(--led-dim); } }
+  @media (prefers-reduced-motion: reduce) { .lamp.wait, .lamp.stopping { animation: none; background: var(--led); opacity: 0.6; } .beats span { transition: none; } }
+  .chan-name { color: var(--head); font-weight: 600; font-size: 0.95rem; }
+  .chan-state { color: var(--muted); font-size: 0.82rem; }
+  .chan .btn { min-width: 86px; }
+
+  /* ---------- settings ---------- */
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  fieldset:disabled .group { opacity: 0.55; }
+  .groups { display: flex; flex-direction: column; gap: 24px; }
+  .group { display: flex; flex-direction: column; gap: 4px; }
+  .group-title {
+    margin: 0 0 6px; font-size: 0.78rem; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.8px;
+  }
+  .row {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 20px; align-items: center;
+    padding: 12px 0; border-top: 1px solid var(--line);
+  }
+  .group .row:first-of-type { border-top: 0; padding-top: 4px; }
+  .row > .seg, .row > .switch, .row > .tempo, .row > .readout { justify-self: end; }
+  @media (max-width: 600px) { .row { grid-template-columns: 1fr; } .row > .seg, .row > .switch, .row > .tempo, .row > .readout { justify-self: start; } }
+  .label { color: var(--head); font-weight: 500; font-size: 0.95rem; }
+  .hint { color: var(--muted); font-size: 0.83rem; }
+  .panel-name { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; margin-left: 6px; white-space: nowrap; }
+
+  .seg { display: inline-flex; flex-wrap: wrap; background: var(--well); border: 1px solid var(--line); border-radius: 7px; padding: 3px; gap: 2px; }
+  .seg label { position: relative; }
+  .seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .seg span {
+    display: block; padding: 5px 12px; border-radius: 5px; font-size: 0.86rem; color: var(--fg);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .seg input:checked + span { background: var(--accent); color: #fff; font-weight: 600; }
+  .seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .seg input:disabled + span { color: var(--muted); }
+  .seg label:hover input:not(:checked):not(:disabled) + span { background: var(--raised); }
+
+  .switch { position: relative; display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.88rem; }
+  .switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .switch .track { width: 40px; height: 22px; border-radius: 11px; background: var(--raised); border: 1px solid var(--line); position: relative; transition: background 0.15s; }
+  .switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: transform 0.15s, background 0.15s; }
+  .switch input:checked + .track { background: var(--accent); border-color: var(--accent); }
+  .switch input:checked + .track::after { transform: translateX(18px); background: #fff; }
+  .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .tempo { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .tempo input[type="range"] { width: 200px; max-width: 100%; accent-color: var(--accent); }
+  .tempo input[type="number"] {
+    width: 76px; background: var(--well); color: var(--head); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 8px; font-family: var(--mono); font-size: 0.95rem; text-align: right;
+  }
+  .step { width: 32px; height: 32px; padding: 0; }
+
+  .readout { font-family: var(--mono); color: var(--head); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+  .readout.none { color: var(--muted); }
+
+  .callout { font-size: 0.85rem; color: var(--fg); background: var(--accent-soft); border: 1px solid rgba(47,129,247,0.35); border-radius: 6px; padding: 8px 12px; }
+
+  footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: center; padding-top: 20px; border-top: 1px solid var(--line); }
+  .save { font-size: 0.85rem; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .save.pending { color: var(--warn); }
+  .save.ok { color: var(--ok); }
+  .reset { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  details { font-size: 0.88rem; color: var(--muted); }
+  details summary { cursor: pointer; color: var(--fg); }
+  details ul { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+  details a, .links a { color: var(--accent); }
+  .links { font-size: 0.85rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back-link" href="./">&lsaquo; All tools</a>
+  <header>
+    <div class="brand">.axs instruments</div>
+    <h1>DCLK Editor</h1>
+    <p class="sub">Change every DCLK setting over USB. Plug DCLK into this computer, then connect.</p>
+  </header>
+
+  <section class="conn" aria-live="polite">
+    <div class="conn-status">
+      <span class="dot" id="dot"></span>
+      <div class="conn-text">
+        <span class="conn-title" id="connTitle">Not connected</span>
+        <span class="conn-detail" id="connDetail">Needs Chrome or Edge on a computer, and DCLK firmware 1.3 or later.</span>
+      </div>
+    </div>
+    <div class="conn-actions">
+      <button class="btn primary" id="btnConnect" type="button">Connect DCLK</button>
+      <button class="btn" id="btnDemo" type="button">Try demo</button>
+    </div>
+  </section>
+
+  <div class="notice" id="notice" hidden></div>
+
+  <section class="live" aria-label="Live status">
+    <div class="oled" aria-hidden="true">
+      <div class="oled-top">
+        <span class="oled-bpm" id="oledBpm">BPM: 120</span>
+        <span class="oled-src" id="oledSrc">INT</span>
+      </div>
+      <div class="beats" id="beats"><span></span><span></span><span></span><span></span></div>
+      <div class="oled-meta" id="oledMeta">BAR 1/4</div>
+    </div>
+    <div class="chans">
+      <div class="chan">
+        <span class="lamp" id="lamp0"></span>
+        <div class="conn-text"><span class="chan-name">MIDI OUT 1</span><span class="chan-state" id="state0">Stopped</span></div>
+        <button class="btn" id="play0" type="button" disabled>Start</button>
+      </div>
+      <div class="chan">
+        <span class="lamp" id="lamp1"></span>
+        <div class="conn-text"><span class="chan-name">MIDI OUT 2</span><span class="chan-state" id="state1">Stopped</span></div>
+        <button class="btn" id="play1" type="button" disabled>Start</button>
+      </div>
+    </div>
+  </section>
+
+  <fieldset id="settings" disabled>
+    <div class="groups">
+
+      <section class="group" aria-labelledby="gClock">
+        <h2 class="group-title" id="gClock">Clock</h2>
+        <div class="row">
+          <div><div class="label">Clock source <span class="panel-name">CLK SRC</span></div>
+            <div class="hint" id="srcHint">DCLK runs its own tempo.</div></div>
+          <div class="seg" role="radiogroup" aria-label="Clock source">
+            <label><input type="radio" name="src" id="src0" value="0" checked><span>Internal</span></label>
+            <label><input type="radio" name="src" id="src1" value="1"><span>USB in</span></label>
+          </div>
+        </div>
+
+        <div class="row" id="rowTempo">
+          <div><div class="label">Tempo</div><div class="hint">30 to 300 BPM, 24 PPQN.</div></div>
+          <div class="tempo">
+            <button class="btn step" id="bpmDown" type="button" aria-label="Tempo down">−</button>
+            <input type="range" id="bpmRange" min="30" max="300" value="120" aria-label="Tempo">
+            <button class="btn step" id="bpmUp" type="button" aria-label="Tempo up">+</button>
+            <input type="number" id="bpmNum" min="30" max="300" value="120" aria-label="Tempo in BPM">
+          </div>
+        </div>
+
+        <div class="row" id="rowExt" hidden>
+          <div><div class="label">Incoming clock</div><div class="hint" id="extHint">Tempo measured from the USB host over the last beat.</div></div>
+          <div class="readout none" id="extReadout">No clock</div>
+        </div>
+
+        <div class="row" id="rowTpt" hidden>
+          <div><div class="label">Host transport <span class="panel-name">EXT TPT</span></div>
+            <div class="hint" id="tptHint"></div></div>
+          <div class="seg" role="radiogroup" aria-label="Host transport">
+            <label><input type="radio" name="tpt" id="tpt1" value="1" checked><span>Follow host</span></label>
+            <label><input type="radio" name="tpt" id="tpt0" value="0"><span>Free</span></label>
+          </div>
+        </div>
+
+        <div class="callout" id="extCallout" hidden></div>
+      </section>
+
+      <section class="group" aria-labelledby="gStart">
+        <h2 class="group-title" id="gStart">Start and stop</h2>
+        <div class="row">
+          <div><div class="label">Wait length <span class="panel-name">WAIT LEN</span></div>
+            <div class="hint">Outputs start on the next boundary of this many bars.</div></div>
+          <div class="seg" role="radiogroup" aria-label="Wait length in bars" id="segWait"></div>
+        </div>
+        <div class="row">
+          <div><div class="label">Quantised stop <span class="panel-name">STOP Q</span></div>
+            <div class="hint">On: a stop waits for the same boundary. Off: stops right away.</div></div>
+          <label class="switch"><input type="checkbox" id="stopq"><span class="track"></span><span id="stopqText">Off</span></label>
+        </div>
+      </section>
+
+      <section class="group" aria-labelledby="gOut">
+        <h2 class="group-title" id="gOut">Outputs</h2>
+        <div class="row">
+          <div><div class="label">MIDI OUT 1 divide <span class="panel-name">CH1 DIV</span></div>
+            <div class="hint" id="div1Hint"></div></div>
+          <div class="seg" role="radiogroup" aria-label="MIDI OUT 1 clock divide" id="segDiv1"></div>
+        </div>
+        <div class="row">
+          <div><div class="label">MIDI OUT 2 divide <span class="panel-name">CH2 DIV</span></div>
+            <div class="hint" id="div2Hint"></div></div>
+          <div class="seg" role="radiogroup" aria-label="MIDI OUT 2 clock divide" id="segDiv2"></div>
+        </div>
+        <div class="row">
+          <div><div class="label">USB clock out follows <span class="panel-name">USB OUT</span></div>
+            <div class="hint" id="usbHint">The USB host gets the same clock as this output, divider included.</div></div>
+          <div class="seg" role="radiogroup" aria-label="USB clock out follows">
+            <label><input type="radio" name="usb" id="usb0" value="0" checked><span>OUT 1</span></label>
+            <label><input type="radio" name="usb" id="usb1" value="1"><span>OUT 2</span></label>
+          </div>
+        </div>
+      </section>
+
+      <section class="group" aria-labelledby="gUnit">
+        <h2 class="group-title" id="gUnit">Panel</h2>
+        <div class="row">
+          <div><div class="label">LED brightness <span class="panel-name">LEDS</span></div>
+            <div class="hint">CH1, CH2 and BEAT LEDs.</div></div>
+          <div class="seg" role="radiogroup" aria-label="LED brightness">
+            <label><input type="radio" name="led" id="led0" value="0"><span>Low</span></label>
+            <label><input type="radio" name="led" id="led1" value="1" checked><span>Mid</span></label>
+            <label><input type="radio" name="led" id="led2" value="2"><span>High</span></label>
+          </div>
+        </div>
+        <div class="row">
+          <div><div class="label">Screen saver <span class="panel-name">SAVER</span></div>
+            <div class="hint">After this long without input the screen dims while a clock runs, or switches off when stopped.</div></div>
+          <div class="seg" role="radiogroup" aria-label="Screen saver" id="segSaver"></div>
+        </div>
+      </section>
+    </div>
+  </fieldset>
+
+  <footer>
+    <div class="save" id="save">Connect to see DCLK's settings.</div>
+    <div class="reset">
+      <button class="btn danger" id="btnReset" type="button" disabled>Reset to defaults</button>
+      <button class="btn" id="btnResetCancel" type="button" hidden>Cancel</button>
+    </div>
+  </footer>
+
+  <details>
+    <summary>Can't connect?</summary>
+    <ul>
+      <li>Use Chrome or Edge on a computer. Safari and phones don't support Web MIDI.</li>
+      <li>When the browser asks to control MIDI devices, choose Allow. If you blocked it, use the icon in the address bar to allow it again.</li>
+      <li>Close any app that has DCLK open (a DAW, MIDI monitor). On Windows only one program can use a MIDI port at a time.</li>
+      <li>The editor needs firmware 1.3 or later. Update with the <a href="./#flash" target="_blank" rel="noopener">firmware flasher</a>.</li>
+      <li>Previews embedded in another site may be blocked from MIDI devices. Open this page directly in its own tab.</li>
+    </ul>
+  </details>
+</div>
+
+<script>
+(() => {
+  // ---------------- Protocol (matches firmware 1.3, SYSEX_PROTO 1) ----------------
+  const HDR = [0xF0, 0x7D, 0x44, 0x43];
+  const CMD = { INFO: 0x01, STATE: 0x02, SET: 0x03, TRANSPORT: 0x04, RESET: 0x06 };
+  const RPL = { INFO: 0x41, STATE: 0x42 };
+  const P = { BPM: 0, SRC: 1, WAIT: 2, STOPQ: 3, DIV1: 4, DIV2: 5, USB: 6, LED: 7, SAVER: 8, TPT: 9, COUNT: 10 };
+  const STATE_LEN = 33;
+
+  const msg = (cmd, ...data) => [...HDR, cmd, ...data, 0xF7];
+  const setMsg = (p, v) => msg(CMD.SET, p, v & 0x7F, (v >> 7) & 0x7F);
+  const isOurs = d => d.length >= 6 && d[0] === 0xF0 && d[1] === 0x7D && d[2] === 0x44 && d[3] === 0x43;
+
+  function decodeState(d) {
+    if (d.length < STATE_LEN || d[4] !== RPL.STATE) return null;
+    const params = [];
+    for (let p = 0; p < P.COUNT; p++) params.push(d[6 + p * 2] | (d[7 + p * 2] << 7));
+    const f1 = d[26], f2 = d[27];
+    return {
+      proto: d[5], params,
+      run: [!!(f1 & 1), !!(f1 & 2)],
+      pend: [!!(f1 & 4), !!(f1 & 8)],
+      stopPend: [!!(f1 & 16), !!(f1 & 32)],
+      savePending: !!(f1 & 64),
+      extPresent: !!(f2 & 1), hostRunning: !!(f2 & 2), usbRunning: !!(f2 & 4),
+      extBpm: (d[28] | (d[29] << 7)) / 10,
+      beat: d[30], bar: d[31],
+    };
+  }
+  function encodeState(s) {          // used by the demo device
+    const out = [...HDR, RPL.STATE, 1];
+    for (const v of s.params) out.push(v & 0x7F, (v >> 7) & 0x7F);
+    out.push((s.run[0] ? 1 : 0) | (s.run[1] ? 2 : 0) | (s.pend[0] ? 4 : 0) | (s.pend[1] ? 8 : 0) |
+             (s.stopPend[0] ? 16 : 0) | (s.stopPend[1] ? 32 : 0) | (s.savePending ? 64 : 0));
+    out.push((s.extPresent ? 1 : 0) | (s.hostRunning ? 2 : 0) | (s.usbRunning ? 4 : 0));
+    const eb = Math.round(s.extBpm * 10);
+    out.push(eb & 0x7F, (eb >> 7) & 0x7F, s.beat, s.bar, 0xF7);
+    return out;
+  }
+
+  // ---------------- Option tables (same as firmware) ----------------
+  const WAITS = [1, 2, 4, 8, 16];
+  const DIVS = [1, 2, 3, 4, 6, 8];
+  const SAVERS = [0, 1, 5, 10, 30];
+  const DEFAULTS = [120, 0, 4, 0, 1, 1, 0, 1, 5, 1];
+
+  // ---------------- Demo device: a small model of the firmware ----------------
+  class DemoDCLK {
+    constructor(onMessage) {
+      this.onMessage = onMessage;
+      this.params = DEFAULTS.slice();
+      this.run = [false, false]; this.pend = [false, false]; this.stopPend = [false, false];
+      this.playReq = [false, false]; this.stopReq = [false, false];
+      this.outTick = [0, 0]; this.loopTick = 0;
+      this.hostRunning = true; this.hostBpm = 124; this.hostAcc = 0; this.hostTicks = 0;
+      this.acc = 0; this.last = performance.now(); this.savePending = false;
+      this.timer = setInterval(() => this.advance(), 5);
+      this.name = 'Demo DCLK';
+    }
+    close() { clearInterval(this.timer); }
+    get ext() { return this.params[P.SRC] === 1; }
+    get hostGrid() { return this.ext && this.params[P.TPT] === 1; }
+    advance() {
+      const now = performance.now(), dt = now - this.last; this.last = now;
+      // A pretend host plays 16 bars, then stops for 2 bars
+      this.hostAcc += dt * this.hostBpm * 24 / 60000;
+      while (this.hostAcc >= 1) {
+        this.hostAcc -= 1; this.hostTicks++;
+        const pos = this.hostTicks % (96 * 18);
+        if (pos === 0) this.hostEvent('start'); else if (pos === 96 * 16) this.hostEvent('stop');
+        if (this.ext && (!this.hostGrid || this.hostRunning)) this.tick();
+      }
+      if (this.ext && this.hostGrid && !this.hostRunning) this.idleRequests();
+      if (!this.ext) {
+        this.acc += dt * this.params[P.BPM] * 24 / 60000;
+        while (this.acc >= 1) { this.acc -= 1; this.tick(); }
+      }
+      if (this.savePending && !this.run[0] && !this.run[1] && !this.pend[0] && !this.pend[1]) this.savePending = false;
+    }
+    hostEvent(e) {
+      if (e === 'start') { this.hostRunning = true; if (this.hostGrid) this.loopTick = 0; }
+      else {
+        this.hostRunning = false;
+        if (this.hostGrid) for (let i = 0; i < 2; i++) if (this.run[i]) { this.run[i] = false; this.pend[i] = !this.stopPend[i]; this.stopPend[i] = false; }
+      }
+    }
+    idleRequests() {
+      for (let i = 0; i < 2; i++) {
+        if (this.stopReq[i]) { this.stopReq[i] = false; this.pend[i] = false; this.run[i] = false; }
+        if (this.playReq[i]) { this.playReq[i] = false; this.pend[i] = true; }
+      }
+    }
+    tick() {
+      const lt = this.params[P.WAIT] * 96, hg = this.hostGrid;
+      const onGrid = this.loopTick % lt === 0;
+      for (let i = 0; i < 2; i++) {
+        if (this.stopReq[i]) {
+          this.stopReq[i] = false;
+          if (this.pend[i]) this.pend[i] = false;
+          else if (this.run[i]) {
+            if (this.stopPend[i]) this.stopPend[i] = false;
+            else if (this.params[P.STOPQ]) this.stopPend[i] = true;
+            else this.run[i] = false;
+          }
+        }
+      }
+      for (let i = 0; i < 2; i++) if (this.stopPend[i] && this.run[i] && onGrid) { this.run[i] = false; this.stopPend[i] = false; }
+      for (let i = 0; i < 2; i++) if (this.playReq[i]) { this.playReq[i] = false; this.pend[i] = true; }
+      const any = this.run[0] || this.run[1];
+      if (!hg && !any && (this.pend[0] || this.pend[1])) this.loopTick = 0;
+      const boundary = (!hg && !any) || this.loopTick % lt === 0;
+      for (let i = 0; i < 2; i++) if (this.pend[i] && boundary) { this.pend[i] = false; this.run[i] = true; this.outTick[i] = 0; }
+      for (let i = 0; i < 2; i++) if (this.run[i]) this.outTick[i]++;
+      if (hg || this.run[0] || this.run[1]) this.loopTick++;
+    }
+    send(d) {
+      if (!isOurs(d)) return;
+      const cmd = d[4];
+      if (cmd === CMD.INFO) return this.reply([...HDR, RPL.INFO, 1, ...[...'1.3'].map(c => c.charCodeAt(0)), 0xF7]);
+      if (cmd === CMD.SET) {
+        const p = d[5], v = d[6] | (d[7] << 7);
+        if (p === P.SRC || p === P.TPT) { this.run = [false, false]; this.pend = [false, false]; this.stopPend = [false, false]; this.loopTick = 0; }
+        this.params[p] = v; this.savePending = true;
+      }
+      if (cmd === CMD.TRANSPORT) {
+        for (const i of d[5] === 2 ? [0, 1] : [d[5]]) {
+          const active = this.run[i] || this.pend[i];
+          const start = d[6] === 0 ? !active : d[6] === 1;
+          if (start && !active) this.playReq[i] = true; else if (!start && active) this.stopReq[i] = true;
+        }
+      }
+      if (cmd === CMD.RESET) { this.params = DEFAULTS.slice(); this.run = [false, false]; this.pend = [false, false]; this.stopPend = [false, false]; this.savePending = true; }
+      const wait = this.params[P.WAIT];
+      this.reply(encodeState({
+        params: this.params, run: this.run, pend: this.pend, stopPend: this.stopPend, savePending: this.savePending,
+        extPresent: true, hostRunning: this.hostRunning, usbRunning: !this.ext && this.run[this.params[P.USB]],
+        extBpm: this.hostBpm, beat: Math.floor(this.loopTick / 24) % 4, bar: Math.floor(this.loopTick / 96) % wait,
+      }));
+    }
+    reply(bytes) { setTimeout(() => this.onMessage(Uint8Array.from(bytes)), 4); }
+  }
+
+  // ---------------- DOM ----------------
+  const $ = id => document.getElementById(id);
+  const ui = {
+    dot: $('dot'), title: $('connTitle'), detail: $('connDetail'), notice: $('notice'),
+    connect: $('btnConnect'), demo: $('btnDemo'), settings: $('settings'),
+    oledBpm: $('oledBpm'), oledSrc: $('oledSrc'), oledMeta: $('oledMeta'), beats: [...$('beats').children],
+    bpmRange: $('bpmRange'), bpmNum: $('bpmNum'), save: $('save'), reset: $('btnReset'), resetCancel: $('btnResetCancel'),
+  };
+
+  function buildSeg(container, name, values, label) {
+    container.innerHTML = values.map(v =>
+      `<label><input type="radio" name="${name}" id="${name}${v}" value="${v}"><span>${label(v)}</span></label>`).join('');
+  }
+  buildSeg($('segWait'), 'wait', WAITS, v => v === 1 ? '1 bar' : `${v}`);
+  buildSeg($('segDiv1'), 'div1', DIVS, v => `/${v}`);
+  buildSeg($('segDiv2'), 'div2', DIVS, v => `/${v}`);
+  buildSeg($('segSaver'), 'saver', SAVERS, v => v === 0 ? 'Off' : `${v} min`);
+
+  // ---------------- Link state ----------------
+  let link = null;                 // { send(bytes), close(), name }
+  let midiAccess = null;
+  let state = null;
+  let pollTimer = null, lastReply = 0, infoWaiter = null;
+  const holds = new Map();         // param -> {value, until}: keep our edit while the reply catches up
+  let draggingTempo = false;
+
+  function setConn(kind, title, detail) {
+    ui.dot.className = 'dot' + (kind ? ' ' + kind : '');
+    ui.title.textContent = title;
+    ui.detail.textContent = detail;
+  }
+  function showNotice(html) { ui.notice.innerHTML = html; ui.notice.hidden = !html; }
+
+  function onMessage(data) {
+    const d = Array.from(data);
+    if (!isOurs(d)) return;                 // clock bytes etc.
+    if (d[4] === RPL.INFO) {
+      const fw = String.fromCharCode(...d.slice(6, -1));
+      if (infoWaiter) { infoWaiter({ proto: d[5], fw }); infoWaiter = null; }
+      return;
+    }
+    const s = decodeState(d);
+    if (!s) return;
+    lastReply = performance.now();
+    state = s;
+    render();
+  }
+
+  function send(bytes) { if (link) try { link.send(bytes); } catch (e) { lost('Sending to DCLK failed: ' + e.message); } }
+
+  function startPolling() {
+    clearInterval(pollTimer);
+    lastReply = performance.now();
+    pollTimer = setInterval(() => {
+      if (!link) return;
+      if (document.hidden) return;
+      send(msg(CMD.STATE));
+      if (performance.now() - lastReply > 2500 && link.kind === 'midi') {
+        setConn('err', 'DCLK not responding', 'Check the USB cable. The editor keeps trying.');
+      } else if (link.kind === 'midi' && ui.dot.classList.contains('err')) {
+        setConn('on', 'Connected to ' + link.name, 'Firmware ' + link.fw);
+      }
+    }, 120);
+  }
+
+  function attach(newLink, kind, detail) {
+    link = newLink; link.kind = kind;
+    ui.settings.disabled = false;
+    ui.reset.disabled = false;
+    $('play0').disabled = $('play1').disabled = false;
+    ui.connect.textContent = 'Disconnect';
+    ui.demo.hidden = kind === 'midi';
+    ui.connect.hidden = kind === 'demo';
+    if (kind === 'demo') { ui.demo.textContent = 'Stop demo'; setConn('demo', 'Demo device', 'Nothing is sent to real hardware. The pretend USB host plays at 124 BPM.'); }
+    else { setConn('on', 'Connected to ' + link.name, detail); }
+    send(msg(CMD.STATE));
+    startPolling();
+  }
+
+  function detach(title, detail) {
+    clearInterval(pollTimer);
+    if (link) try { link.close(); } catch (e) {}
+    link = null; state = null;
+    ui.settings.disabled = true;
+    ui.reset.disabled = true; disarmReset();
+    $('play0').disabled = $('play1').disabled = true;
+    ui.connect.textContent = 'Connect DCLK';
+    ui.demo.hidden = false; ui.demo.textContent = 'Try demo'; ui.connect.hidden = false;
+    setConn('', title || 'Not connected', detail || 'Needs Chrome or Edge on a computer, and DCLK firmware 1.3 or later.');
+    ui.save.className = 'save'; ui.save.textContent = 'Connect to see DCLK’s settings.';
+    render();
+  }
+  function lost(why) { detach('Disconnected', why); }
+
+  // ---------------- Web MIDI connection ----------------
+  const findPort = map => [...map.values()].find(p => /dclk/i.test(p.name || '') && p.state !== 'disconnected');
+
+  async function connectMidi() {
+    showNotice('');
+    if (!navigator.requestMIDIAccess) {
+      showNotice('This browser doesn’t support Web MIDI. Open this page in Chrome or Edge on a computer.');
+      return;
+    }
+    setConn('', 'Connecting…', 'Allow MIDI access if the browser asks.');
+    try {
+      midiAccess = midiAccess || await navigator.requestMIDIAccess({ sysex: true });
+    } catch (e) {
+      detach('MIDI access refused', '');
+      showNotice('The browser refused MIDI access. Allow MIDI devices for this site using the icon in the address bar, then connect again. ' +
+        'Previews embedded inside another site can’t reach MIDI devices at all; open the page in its own tab.');
+      return;
+    }
+    midiAccess.onstatechange = onPortChange;
+    const out = findPort(midiAccess.outputs), inp = findPort(midiAccess.inputs);
+    if (!out || !inp) {
+      detach('No DCLK found', 'Plug DCLK in with a USB-C data cable and connect again.');
+      return;
+    }
+    try { await inp.open(); await out.open(); }
+    catch (e) {
+      detach('DCLK is busy', 'Another program is using DCLK’s MIDI port. Close it and connect again.');
+      return;
+    }
+    inp.onmidimessage = e => onMessage(e.data);
+    const tmp = { send: b => out.send(b), close: () => { inp.onmidimessage = null; }, name: out.name, kind: 'midi' };
+    link = tmp;
+
+    let info = null;
+    for (let attempt = 0; attempt < 3 && !info; attempt++) {
+      info = await new Promise(res => {
+        infoWaiter = res;
+        try { out.send(msg(CMD.INFO)); } catch (e) {}
+        setTimeout(() => { if (infoWaiter === res) { infoWaiter = null; res(null); } }, 600);
+      });
+    }
+    if (!info) {
+      link = null; tmp.close();
+      detach('DCLK didn’t answer', '');
+      showNotice('DCLK is plugged in but didn’t reply. The editor needs firmware 1.3 or later: update it with the ' +
+        '<a href="./#flash" target="_blank" rel="noopener">firmware flasher</a>, then connect again.');
+      return;
+    }
+    tmp.fw = info.fw;
+    link = null;
+    attach(tmp, 'midi', 'Firmware ' + info.fw);
+  }
+
+  let autoReconnect = false;
+  function onPortChange(e) {
+    if (!/dclk/i.test(e.port.name || '')) return;
+    if (e.port.state === 'disconnected' && link && link.kind === 'midi') {
+      autoReconnect = true;
+      lost('DCLK was unplugged. It reconnects when you plug it back in.');
+    } else if (e.port.state === 'connected' && autoReconnect && !link) {
+      autoReconnect = false;
+      setTimeout(connectMidi, 400);
+    }
+  }
+
+  ui.connect.addEventListener('click', () => { if (link) { autoReconnect = false; detach(); } else connectMidi(); });
+  ui.demo.addEventListener('click', () => {
+    if (link && link.kind === 'demo') { detach(); return; }
+    showNotice('');
+    attach(new DemoDCLK(onMessage), 'demo');
+  });
+
+  // ---------------- Sending changes ----------------
+  function setParam(p, v) {
+    holds.set(p, { value: v, until: performance.now() + 500 });
+    if (state) { state.params[p] = v; render(); }
+    send(setMsg(p, v));
+  }
+  const param = p => {
+    const h = holds.get(p);
+    if (h && performance.now() < h.until) return h.value;
+    holds.delete(p);
+    return state ? state.params[p] : DEFAULTS[p];
+  };
+
+  const radioBind = (name, p) => document.querySelectorAll(`input[name="${name}"]`).forEach(r =>
+    r.addEventListener('change', () => r.checked && setParam(p, +r.value)));
+  radioBind('src', P.SRC); radioBind('tpt', P.TPT); radioBind('wait', P.WAIT);
+  radioBind('div1', P.DIV1); radioBind('div2', P.DIV2); radioBind('usb', P.USB);
+  radioBind('led', P.LED); radioBind('saver', P.SAVER);
+  $('stopq').addEventListener('change', e => setParam(P.STOPQ, e.target.checked ? 1 : 0));
+
+  // Tempo: send while dragging, at most every 40 ms
+  let tempoSent = 0, tempoTimer = null;
+  function sendTempo(v, now) {
+    v = Math.max(30, Math.min(300, Math.round(v) || 120));
+    ui.bpmRange.value = v; ui.bpmNum.value = v;
+    clearTimeout(tempoTimer);
+    const go = () => { tempoSent = performance.now(); setParam(P.BPM, v); };
+    if (now || performance.now() - tempoSent > 40) go(); else tempoTimer = setTimeout(go, 40);
+  }
+  ui.bpmRange.addEventListener('input', () => { draggingTempo = true; sendTempo(ui.bpmRange.value); });
+  ui.bpmRange.addEventListener('change', () => { draggingTempo = false; sendTempo(ui.bpmRange.value, true); });
+  ui.bpmNum.addEventListener('focus', () => { draggingTempo = true; });
+  ui.bpmNum.addEventListener('blur', () => { draggingTempo = false; sendTempo(ui.bpmNum.value, true); });
+  ui.bpmNum.addEventListener('keydown', e => { if (e.key === 'Enter') ui.bpmNum.blur(); });
+  $('bpmDown').addEventListener('click', () => sendTempo(param(P.BPM) - 1, true));
+  $('bpmUp').addEventListener('click', () => sendTempo(param(P.BPM) + 1, true));
+
+  for (const i of [0, 1]) $('play' + i).addEventListener('click', () => send(msg(CMD.TRANSPORT, i, 0)));
+
+  // Reset needs a second click
+  let resetArmed = null;
+  function disarmReset() { clearTimeout(resetArmed); resetArmed = null; ui.reset.classList.remove('armed'); ui.reset.textContent = 'Reset to defaults'; ui.resetCancel.hidden = true; }
+  ui.reset.addEventListener('click', () => {
+    if (!resetArmed) {
+      ui.reset.classList.add('armed'); ui.reset.textContent = 'Stop clocks and reset'; ui.resetCancel.hidden = false;
+      resetArmed = setTimeout(disarmReset, 5000);
+      return;
+    }
+    disarmReset();
+    send(msg(CMD.RESET, 0x44, 0x45, 0x46));
+  });
+  ui.resetCancel.addEventListener('click', disarmReset);
+
+  // ---------------- Render ----------------
+  const check = (id, on) => { const el = $(id); if (el && el.checked !== on) el.checked = on; };
+  const fmtBpm = v => (Math.round(v * 10) / 10).toFixed(1);
+
+  function render() {
+    const s = state;
+    const src = param(P.SRC), tpt = param(P.TPT), bpm = param(P.BPM), wait = param(P.WAIT);
+    const ext = src === 1, hostGrid = ext && tpt === 1;
+    const extPresent = s ? s.extPresent : false, extBpm = s ? s.extBpm : 0;
+    const hostRunning = s ? s.hostRunning : false;
+
+    // OLED
+    ui.oledBpm.textContent = ext ? `EXT: ${extPresent && extBpm ? Math.round(extBpm) : '--'}` : `BPM: ${bpm}`;
+    ui.oledSrc.textContent = ext ? (hostGrid ? (hostRunning ? 'HOST PLAY' : 'HOST STOP') : 'USB FREE') : 'INT';
+    const ticking = s && (s.run[0] || s.run[1] || (hostGrid && hostRunning));
+    ui.beats.forEach((b, i) => b.classList.toggle('on', !!ticking && s.beat === i));
+    ui.oledMeta.textContent = `BAR ${ticking ? s.bar + 1 : 1}/${wait}  ·  WAIT ${wait}`;
+
+    // Channels
+    for (const i of [0, 1]) {
+      const lamp = $('lamp' + i), st = $('state' + i), btn = $('play' + i);
+      let cls = '', text = 'Stopped', label = 'Start';
+      if (s) {
+        const div = param(i ? P.DIV2 : P.DIV1);
+        const divText = div > 1 ? ` · /${div}` : '';
+        if (s.run[i] && s.stopPend[i]) { cls = 'stopping'; text = 'Stopping on the next boundary'; label = 'Keep going'; }
+        else if (s.run[i]) { cls = 'run'; text = 'Running' + divText; label = 'Stop'; }
+        else if (s.pend[i]) {
+          cls = 'wait'; label = 'Cancel';
+          text = hostGrid && !hostRunning ? 'Armed, starts with the host' : `Waiting for the ${wait === 1 ? 'next bar' : wait + '-bar boundary'}`;
+        }
+      }
+      lamp.className = 'lamp' + (cls ? ' ' + cls : '');
+      st.textContent = text;
+      btn.textContent = label;
+    }
+
+    // Clock source rows
+    check('src0', !ext); check('src1', ext);
+    $('rowTempo').hidden = ext;
+    $('rowExt').hidden = !ext;
+    $('rowTpt').hidden = !ext;
+    $('srcHint').textContent = ext
+      ? 'DCLK follows MIDI clock from the USB host (a DAW, OP-XY…). The encoder doesn’t change tempo, and no clock is sent back over USB.'
+      : 'DCLK runs its own tempo, set here or with the encoder.';
+    if (!draggingTempo) { ui.bpmRange.value = bpm; if (document.activeElement !== ui.bpmNum) ui.bpmNum.value = bpm; }
+    const ro = $('extReadout');
+    ro.textContent = extPresent && extBpm ? `${fmtBpm(extBpm)} BPM` : 'No clock';
+    ro.classList.toggle('none', !(extPresent && extBpm));
+    check('tpt1', tpt === 1); check('tpt0', tpt === 0);
+    $('tptHint').textContent = tpt === 1
+      ? 'Outputs you start are armed and run with the host’s Start, Stop and Continue. Wait length counts from the host’s bar 1.'
+      : 'Ignore the host’s Start and Stop. The incoming clock only sets the tempo, and the outputs start and stop as they do on internal clock.';
+
+    const call = $('extCallout');
+    if (!ext && extPresent && extBpm) { call.hidden = false; call.textContent = `A clock is arriving over USB at ${fmtBpm(extBpm)} BPM. Choose USB in to follow it.`; }
+    else if (ext && s && !extPresent) { call.hidden = false; call.textContent = 'No clock is arriving over USB. Start the host’s transport, and check it sends MIDI clock to DCLK.'; }
+    else call.hidden = true;
+
+    // Start/stop
+    check('wait' + wait, true);
+    const sq = param(P.STOPQ) === 1;
+    if ($('stopq').checked !== sq) $('stopq').checked = sq;
+    $('stopqText').textContent = sq ? 'On' : 'Off';
+
+    // Outputs
+    const tempo = ext ? (extPresent ? extBpm : 0) : bpm;
+    for (const [k, p] of [['1', P.DIV1], ['2', P.DIV2]]) {
+      const div = param(p);
+      check(`div${k}${div}`, true);
+      $(`div${k}Hint`).textContent = div === 1
+        ? 'Full-rate clock, 24 pulses per beat.'
+        : tempo ? `Downstream gear sees ${fmtBpm(tempo / div)} BPM (${fmtBpm(tempo)} ÷ ${div}).` : `Sends every ${div}${div === 2 ? 'nd' : div === 3 ? 'rd' : 'th'} clock pulse.`;
+    }
+    const usb = param(P.USB);
+    check('usb0', usb === 0); check('usb1', usb === 1);
+    document.querySelectorAll('input[name="usb"]').forEach(r => { r.disabled = ext; });
+    $('usbHint').textContent = ext
+      ? 'Off while DCLK follows USB clock. The host is the master.'
+      : 'The USB host gets the same clock as this output, divider included.';
+
+    // Panel
+    check('led' + param(P.LED), true);
+    check('saver' + param(P.SAVER), true);
+
+    // Save status
+    if (s) {
+      if (s.savePending) {
+        ui.save.className = 'save pending';
+        ui.save.textContent = hostGrid ? 'Changes are saved to DCLK once the host stops.' : 'Changes are saved to DCLK once every output is stopped.';
+      } else { ui.save.className = 'save ok'; ui.save.textContent = 'Saved on DCLK'; }
+    }
+  }
+
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && link) send(msg(CMD.STATE)); });
+  render();
+})();
+</script>
+
+</body>
+</html>

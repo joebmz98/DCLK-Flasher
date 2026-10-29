@@ -1,6 +1,6 @@
 # DCLK-Flasher
 
-Web firmware flasher for the **DCLK Dual MIDI Clock** (.axs instruments).
+Web firmware flasher and settings editor for the **DCLK Dual MIDI Clock** (.axs instruments).
 Runs in Chrome or Edge and talks to the STM32F411 Black Pill's built-in ROM
 DFU bootloader over WebUSB. No drivers on Mac, a one-time WinUSB driver
 (Zadig) on Windows, a udev rule on Linux.
@@ -14,7 +14,8 @@ are aborted, every byte is read back, and bad sectors are repaired.
 
 | File | What it is |
 | --- | --- |
-| `index.html` | The flasher page |
+| `index.html` | Start screen (choose a tool) and the flasher, at `#flash` |
+| `editor.html` | DCLK Editor: change settings over USB MIDI (Web MIDI + SysEx, firmware v1.3+) |
 | `dfuse.js` | STM32 DfuSe over WebUSB: HEX/BIN parsing, erase, write, verify, start |
 | `manifest.json` | Which firmware the "Latest release" option flashes |
 | `firmware/` | DCLK release builds |
