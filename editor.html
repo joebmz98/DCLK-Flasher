@@ -619,7 +619,27 @@
   function lost(why) { detach('Disconnected', why); }
 
   // ---------------- Web MIDI connection ----------------
-  const findPort = map => [...map.values()].find(p => /dclk/i.test(p.name || '') && p.state !== 'disconnected');
+  // DCLK is found by asking, not by name: macOS remembers the first name a
+  // USB MIDI device ever had (Audio MIDI Setup), so a Black Pill that once ran
+  // another sketch can show up as e.g. "GENERIC_F411CEUX". Every output is sent
+  // the editor's INFO request (other gear ignores this non-commercial SysEx),
+  // and whichever input answers is DCLK. Ports named DCLK are tried first.
+  const looksLikeDclk = p => /dclk/i.test(p.name || '') || /axs/i.test(p.manufacturer || '');
+  let knownPort = null;            // { inName, outName } of the last DCLK found, for auto-reconnect
+
+  function waitForInfo(inputs, ms) {
+    return new Promise(res => {
+      let done = false;
+      const finish = v => { if (done) return; done = true; clearTimeout(t); res(v); };
+      const t = setTimeout(() => finish(null), ms);
+      for (const inp of inputs) {
+        inp.onmidimessage = e => {
+          const d = Array.from(e.data);
+          if (isOurs(d) && d[4] === RPL.INFO) finish({ inp, proto: d[5], fw: String.fromCharCode(...d.slice(6, -1)) });
+        };
+      }
+    });
+  }
 
   async function connectMidi() {
     showNotice('');
@@ -637,47 +657,67 @@
       return;
     }
     midiAccess.onstatechange = onPortChange;
-    const out = findPort(midiAccess.outputs), inp = findPort(midiAccess.inputs);
-    if (!out || !inp) {
-      detach('No DCLK found', 'Plug DCLK in with a USB-C data cable and connect again.');
-      return;
-    }
-    try { await inp.open(); await out.open(); }
-    catch (e) {
-      detach('DCLK is busy', 'Another program is using DCLK’s MIDI port. Close it and connect again.');
-      return;
-    }
-    inp.onmidimessage = e => onMessage(e.data);
-    const tmp = { send: b => out.send(b), close: () => { inp.onmidimessage = null; }, name: out.name, kind: 'midi' };
-    link = tmp;
 
-    let info = null;
-    for (let attempt = 0; attempt < 3 && !info; attempt++) {
-      info = await new Promise(res => {
-        infoWaiter = res;
-        try { out.send(msg(CMD.INFO)); } catch (e) {}
-        setTimeout(() => { if (infoWaiter === res) { infoWaiter = null; res(null); } }, 600);
-      });
-    }
-    if (!info) {
-      link = null; tmp.close();
-      detach('DCLK didn’t answer', '');
-      showNotice('DCLK is plugged in but didn’t reply. The editor needs firmware 1.3 or later: update it with the ' +
-        '<a href="./#flash" target="_blank" rel="noopener">firmware flasher</a>, then connect again.');
+    const live = map => [...map.values()].filter(p => p.state !== 'disconnected');
+    const byLikely = (a, b) => looksLikeDclk(b) - looksLikeDclk(a);
+    const outs = live(midiAccess.outputs).sort(byLikely);
+    const allIns = live(midiAccess.inputs).sort(byLikely);
+    if (!outs.length || !allIns.length) {
+      detach('No MIDI devices found', 'Plug DCLK in with a USB-C data cable and connect again.');
       return;
     }
-    tmp.fw = info.fw;
-    link = null;
-    attach(tmp, 'midi', 'Firmware ' + info.fw);
+
+    setConn('', 'Looking for DCLK…', `Checking ${outs.length} MIDI ${outs.length === 1 ? 'port' : 'ports'}.`);
+    const ins = [], busy = [];
+    for (const p of allIns) {
+      try { await p.open(); ins.push(p); } catch (e) { busy.push(p.name); }
+    }
+
+    let found = null, foundOut = null;
+    for (let round = 0; round < 2 && !found; round++) {
+      for (const out of outs) {
+        try { await out.open(); } catch (e) { busy.push(out.name); continue; }
+        const wait = waitForInfo(ins, round ? 900 : 450);
+        try { out.send(msg(CMD.INFO)); } catch (e) {}
+        found = await wait;
+        if (found) { foundOut = out; break; }
+      }
+    }
+
+    // Release every port that isn't DCLK
+    for (const p of ins) if (!found || p !== found.inp) { p.onmidimessage = null; try { p.close(); } catch (e) {} }
+    for (const p of outs) if (p !== foundOut) { try { p.close(); } catch (e) {} }
+
+    if (!found) {
+      const names = [...new Set(outs.map(p => p.name))].join(', ');
+      if (busy.length && !ins.length) {
+        detach('DCLK is busy', 'Another program is using the MIDI ports. Close it and connect again.');
+        return;
+      }
+      detach('DCLK didn’t answer', `Ports checked: ${names}`);
+      showNotice('No MIDI port answered as DCLK. Check DCLK is plugged in and shows fw v1.3 or later under Settings > ABOUT (update with the ' +
+        '<a href="./#flash" target="_blank" rel="noopener">firmware flasher</a>), and close any app that has it open.');
+      return;
+    }
+
+    const inp = found.inp, out = foundOut;
+    inp.onmidimessage = e => onMessage(e.data);
+    knownPort = { inName: inp.name, outName: out.name, inId: inp.id, outId: out.id };
+    const tmp = { send: b => out.send(b), close: () => { inp.onmidimessage = null; }, name: 'DCLK', kind: 'midi', fw: found.fw };
+    const portNote = looksLikeDclk(out) ? '' : ` · port “${out.name}”`;
+    attach(tmp, 'midi', 'Firmware ' + found.fw + portNote);
   }
 
   let autoReconnect = false;
   function onPortChange(e) {
-    if (!/dclk/i.test(e.port.name || '')) return;
-    if (e.port.state === 'disconnected' && link && link.kind === 'midi') {
+    const p = e.port;
+    const ours = knownPort && (p.id === knownPort.inId || p.id === knownPort.outId ||
+                               p.name === knownPort.inName || p.name === knownPort.outName);
+    if (!ours && !looksLikeDclk(p)) return;
+    if (p.state === 'disconnected' && link && link.kind === 'midi') {
       autoReconnect = true;
       lost('DCLK was unplugged. It reconnects when you plug it back in.');
-    } else if (e.port.state === 'connected' && autoReconnect && !link) {
+    } else if (p.state === 'connected' && autoReconnect && !link) {
       autoReconnect = false;
       setTimeout(connectMidi, 400);
     }
