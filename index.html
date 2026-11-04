@@ -83,6 +83,10 @@
     .options { display: flex; flex-wrap: wrap; gap: 10px 26px; font-size: 16px; }
     .options label { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 
+    .dfu-row { gap: 10px; }
+    .dfu-row .row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+    .dfu-row .hint { font-size: 16px; }
+    .dfu-row .status-text { text-align: left; max-width: none; }
     .flash-row { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 6px 0; }
 
     .progress { width: 100%; height: 24px; padding: 4px; visibility: hidden; border: 2px solid transparent; border-image: var(--px-frame) 8 / 8px round; }
@@ -172,8 +176,8 @@
       <h2 class="section-head">How to flash</h2>
       <ol class="steps">
         <li><span>Connect DCLK with a USB&#8209;C data cable (plug it straight into the computer, not a&nbsp;hub). Stop any clock that is running and close apps using it as a MIDI&nbsp;device.</span></li>
-        <li><span>Put it into DFU mode: <strong>hold BOOT0</strong>, tap <strong>NRST</strong>, keep holding BOOT0 for about one second, then let&nbsp;go.
-          <small>You can also hold BOOT0 while plugging the cable in. These boards sometimes need two or three tries. In DFU mode the OLED and LEDs stay off and DCLK no longer shows up as a MIDI&nbsp;device.</small></span></li>
+        <li><span>Put it into DFU mode: click <strong>Enter update mode</strong> below, or choose <strong>UPDATE</strong> in DCLK's Settings menu. The screen shows <strong>DFU READY</strong>.
+          <small>Needs firmware 1.5 or later. On older firmware, or if DCLK won't start: <strong>hold BOOT0</strong>, tap <strong>NRST</strong>, keep holding BOOT0 for about one second, then let go. That can take two or three tries, and the OLED and LEDs stay off in that&nbsp;mode.</small></span></li>
         <li><span>Choose the firmware below, click <strong>Flash Firmware</strong> and pick <strong>STM32 BOOTLOADER</strong> in the&nbsp;popup.</span></li>
         <li><span>Wait for <strong>Done</strong>. DCLK restarts by itself. If it does not, press <strong>NRST</strong>&nbsp;once.
           <small>Your saved settings (LED brightness, MIDI options) are kept: the flasher never erases the settings&nbsp;area.</small></span></li>
@@ -181,6 +185,15 @@
     </section>
 
     <div class="action-area frame-double">
+      <fieldset class="dfu-row">
+        <legend>Update mode</legend>
+        <div class="row">
+          <button id="dfuBtn" class="btn" type="button">Enter update mode</button>
+          <span class="hint">Restarts DCLK into DFU mode over USB MIDI. Firmware 1.5 or&nbsp;later.</span>
+        </div>
+        <div id="dfuStatus" class="status-text" hidden></div>
+      </fieldset>
+
       <fieldset>
         <legend>Firmware</legend>
         <label class="choice">
@@ -231,7 +244,7 @@
       <summary>Troubleshooting</summary>
 
       <h3>STM32 BOOTLOADER is not in the&nbsp;list</h3>
-      <p>The board is not in DFU mode yet. If your computer lists DCLK as a MIDI device instead, it is still running its normal firmware. Repeat step 2, try a different cable (many USB&#8209;C cables are charge only) and plug directly into the computer. On Windows, Device Manager should show <em>STM32 BOOTLOADER</em> while it is in DFU&nbsp;mode.</p>
+      <p>The board is not in DFU mode yet. If your computer lists DCLK as a MIDI device instead, it is still running its normal firmware. Click <em>Enter update mode</em> again or use BOOT0 and NRST (step 2), try a different cable (many USB&#8209;C cables are charge only) and plug directly into the computer. On Windows, Device Manager should show <em>STM32 BOOTLOADER</em> while it is in DFU&nbsp;mode.</p>
 
       <h3>Windows: "Access denied" or "Unable to claim&nbsp;interface"</h3>
       <p>Chrome can only talk to the bootloader through the WinUSB driver. Download <a href="https://zadig.akeo.ie/" target="_blank" rel="noopener">Zadig</a>, put the board in DFU mode, choose <em>Options &gt; List All Devices</em>, select <em>STM32 BOOTLOADER</em>, pick <em>WinUSB</em> and click <em>Replace Driver</em>. This is needed once per&nbsp;computer.</p>
@@ -468,6 +481,7 @@
           !confirm(warnings.join('\n\n') + '\n\nFlash it anyway?')) return;
 
       busy = true;
+      dfuBtn.disabled = true;
       flashBtn.disabled = true;
       setProgress(null);
       let dfu = null;
@@ -519,11 +533,101 @@
       } finally {
         if (dfu && !left) await dfu.close();
         busy = false;
+        dfuBtn.disabled = false;
         showImageInfo();
       }
     });
 
     log('Flasher loaded. Waiting for firmware download.');
+    // ---------- Update mode: ask DCLK to restart into DFU over USB MIDI ----------
+    // DCLK is found by asking every MIDI port (its port name can differ, see
+    // the editor), then sent ENTER DFU. Firmware 1.5+ replies 47, stops its
+    // clocks, saves settings and restarts into the ROM bootloader.
+    const SX = [0xF0, 0x7D, 0x44, 0x43];
+    const sxMsg = (cmd, ...d) => [...SX, cmd, ...d, 0xF7];
+    const isDclkSx = (d) => d.length >= 6 && d[0] === 0xF0 && d[1] === 0x7D && d[2] === 0x44 && d[3] === 0x43;
+    const looksLikeDclk = (p) => /dclk/i.test(p.name || '') || /axs/i.test(p.manufacturer || '');
+    const versionAtLeast = (v, min) => {
+      const a = String(v).replace(/^v/i, '').split('.').map(Number), b = min.split('.').map(Number);
+      for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        const x = a[i] || 0, y = b[i] || 0;
+        if (x !== y) return x > y;
+      }
+      return true;
+    };
+    const dfuBtn = $('dfuBtn');
+    const dfuStatus = $('dfuStatus');
+    function setDfuStatus(text, kind = '') {
+      dfuStatus.hidden = !text;
+      dfuStatus.textContent = keepTogether(text);
+      dfuStatus.className = 'status-text' + (kind ? ' ' + kind : '');
+    }
+    const waitReply = (inputs, cmd, ms) => new Promise((res) => {
+      let done = false;
+      const finish = (v) => { if (done) return; done = true; clearTimeout(t); res(v); };
+      const t = setTimeout(() => finish(null), ms);
+      for (const inp of inputs) {
+        inp.onmidimessage = (e) => {
+          const d = Array.from(e.data);
+          if (isDclkSx(d) && d[4] === cmd) finish({ inp, d });
+        };
+      }
+    });
+
+    async function enterUpdateMode() {
+      if (busy) return;
+      dfuBtn.disabled = true;
+      setDfuStatus('Looking for DCLK…');
+      const opened = [];
+      try {
+        if (!navigator.requestMIDIAccess) throw new DfuError('This browser has no Web MIDI. Use Chrome or Edge on a computer.');
+        let access;
+        try { access = await navigator.requestMIDIAccess({ sysex: true }); }
+        catch (e) { throw new DfuError('The browser refused MIDI access. Allow MIDI devices for this site from the icon in the address bar, then try again.'); }
+
+        const live = (m) => [...m.values()].filter((p) => p.state !== 'disconnected').sort((a, b) => looksLikeDclk(b) - looksLikeDclk(a));
+        const outs = live(access.outputs), ins = [];
+        for (const p of live(access.inputs)) { try { await p.open(); ins.push(p); opened.push(p); } catch (e) { log(`MIDI input "${p.name}" is busy`, 'WARN'); } }
+        log(`Update mode: checking ${outs.length} MIDI output(s): ${outs.map((p) => p.name).join(', ') || 'none'}`);
+
+        let found = null, out = null;
+        for (let round = 0; round < 2 && !found; round++) {
+          for (const o of outs) {
+            try { await o.open(); opened.push(o); } catch (e) { continue; }
+            const wait = waitReply(ins, 0x41, round ? 900 : 450);
+            try { o.send(sxMsg(0x01)); } catch (e) {}
+            found = await wait;
+            if (found) { out = o; break; }
+          }
+        }
+        if (!found) {
+          throw new DfuError('No DCLK answered over USB. Check it is plugged in and running, and close any app using it. If its screen shows DFU READY, or it is blank after BOOT0 + NRST, it is already in update mode: go ahead and flash.');
+        }
+        const fw = String.fromCharCode(...found.d.slice(6, -1));
+        log(`Found DCLK on "${out.name}", firmware ${fw}`, 'OK');
+        if (!versionAtLeast(fw, '1.5')) {
+          throw new DfuError(`DCLK has firmware ${fw}, which can't enter update mode by itself. This time, use BOOT0 and NRST (step 2). From 1.5 on, this button works.`);
+        }
+
+        setDfuStatus('Restarting DCLK into update mode…');
+        const ack = waitReply([found.inp], 0x47, 1500);
+        out.send(sxMsg(0x07, 0x44, 0x46, 0x55));            // ENTER DFU ("DFU")
+        log('Sent ENTER DFU');
+        if (!(await ack)) throw new DfuError('DCLK didn\u2019t confirm. Try again, or use BOOT0 and NRST (step 2).');
+        log('DCLK confirmed: restarting into the STM32 bootloader', 'OK');
+        await new Promise((r) => setTimeout(r, 1200));     // stop clocks, save, reset, enumerate
+        setDfuStatus('DCLK is in update mode (its screen shows DFU READY). Click Flash Firmware and choose STM32 BOOTLOADER.', 'ok');
+      } catch (e) {
+        const msg = e instanceof DfuError ? e.message : `Unexpected error: ${e.message}`;
+        log(msg, 'ERROR');
+        setDfuStatus(msg, 'error');
+      } finally {
+        for (const p of opened) { if (p.type === 'input') p.onmidimessage = null; try { p.close(); } catch (e) {} }
+        dfuBtn.disabled = false;
+      }
+    }
+    dfuBtn.addEventListener('click', enterUpdateMode);
+
     loadRelease()
       .then(() => { setStatus('Ready to flash'); showImageInfo(); })
       .catch((e) => {
