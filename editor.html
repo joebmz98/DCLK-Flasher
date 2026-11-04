@@ -449,7 +449,7 @@
     send(d) {
       if (!isOurs(d)) return;
       const cmd = d[4];
-      if (cmd === CMD.INFO) return this.reply([...HDR, RPL.INFO, 1, ...[...'1.3'].map(c => c.charCodeAt(0)), 0xF7]);
+      if (cmd === CMD.INFO) return this.reply([...HDR, RPL.INFO, 1, ...[...'1.5'].map(c => c.charCodeAt(0)), 0xF7]);
       if (cmd === CMD.SET) {
         const p = d[5], v = d[6] | (d[7] << 7);
         if (p === P.SRC || p === P.TPT) { this.run = [false, false]; this.pend = [false, false]; this.stopPend = [false, false]; this.loopTick = 0; }
@@ -706,6 +706,25 @@
     const tmp = { send: b => out.send(b), close: () => { inp.onmidimessage = null; }, name: 'DCLK', kind: 'midi', fw: found.fw };
     const portNote = looksLikeDclk(out) ? '' : ` · port “${out.name}”`;
     attach(tmp, 'midi', 'Firmware ' + found.fw + portNote);
+    checkForUpdate(found.fw);
+  }
+
+  // Point at the flasher when a newer release is on this site
+  async function checkForUpdate(fw) {
+    try {
+      const m = await (await fetch('manifest.json?v=' + Date.now())).json();
+      const latest = String(m.version || '').replace(/^v/i, '');
+      const num = v => String(v).replace(/^v/i, '').split('.').map(Number);
+      const [a, b] = [num(fw), num(latest)];
+      let newer = false;
+      for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        if ((b[i] || 0) !== (a[i] || 0)) { newer = (b[i] || 0) > (a[i] || 0); break; }
+      }
+      if (newer && link && link.kind === 'midi') {
+        showNotice(`Firmware ${latest} is available (DCLK has ${fw}). Update it with the ` +
+          '<a href="./#flash">firmware flasher</a>; your settings are kept.');
+      }
+    } catch (e) { /* offline or opened from a file: skip */ }
   }
 
   let autoReconnect = false;

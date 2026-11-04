@@ -86,6 +86,7 @@ Messages are `F0 7D 44 43 <cmd> <data...> F7` (7D = non-commercial ID,
 | `03` | SET `<param> <lo> <hi>` | `42` |
 | `04` | TRANSPORT `<out> <action>` (out 0, 1 or 2 = both; action 0 toggle, 1 start, 2 stop) | `42` |
 | `06` | FACTORY RESET `44 45 46` ("DEF") | `42` |
+| `07` | ENTER DFU `44 46 55` ("DFU"), firmware 1.5+ | `47`, then DCLK stops its clocks, saves and restarts into the ROM DFU bootloader |
 
 Settings in order: 0 tempo, 1 clock source, 2 wait length (bars), 3 stop Q,
 4 OUT 1 divide, 5 OUT 2 divide, 6 USB out, 7 LED level, 8 screen saver
@@ -98,9 +99,17 @@ top of the firmware sketch.
 
 1. Connect DCLK straight to the computer (not a hub). Stop any running clock
    and close apps using it as a MIDI device.
-2. Enter DFU mode: **hold BOOT0, tap NRST**, keep holding BOOT0 for about a
-   second, then let go (or hold BOOT0 while plugging in). The OLED and LEDs
-   stay off. It can take two or three tries.
+2. Enter DFU mode, one of:
+   - Click **Enter update mode** on the flasher (firmware 1.5+). It finds
+     DCLK over USB MIDI and asks it to restart into DFU mode.
+   - Choose **UPDATE** in DCLK's Settings menu and push the encoder
+     (firmware 1.5+).
+   - **Hold BOOT0, tap NRST**, keep holding BOOT0 for about a second, then
+     let go (or hold BOOT0 while plugging in). Works on any firmware, and is
+     the way back in if a flash failed. It can take two or three tries.
+
+   The first two stop the clocks, save the settings and leave **DFU READY**
+   on the screen. With BOOT0 the OLED and LEDs stay off.
 3. Pick the firmware and click **Flash Firmware**, then choose
    **STM32 BOOTLOADER** in the popup.
 4. Wait for **Done**. DCLK restarts by itself; if not, press NRST once.
@@ -129,7 +138,8 @@ the log are normal.
 
 - **STM32 BOOTLOADER not in the list:** the board isn't in DFU mode yet. If
   the computer lists DCLK as a MIDI device, it's still running its normal
-  firmware. Try again, and try another cable (many USB-C cables are charge
+  firmware. Click **Enter update mode** again or use BOOT0 + NRST, and try
+  another cable (many USB-C cables are charge
   only).
 - **Windows, "Access denied" / "Unable to claim interface":** install the
   WinUSB driver once with [Zadig](https://zadig.akeo.ie/) (Options > List All
