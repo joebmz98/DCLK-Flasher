@@ -82,7 +82,7 @@ Messages are `F0 7D 44 43 <cmd> <data...> F7` (7D = non-commercial ID,
 | Cmd | Request | Reply |
 | --- | --- | --- |
 | `01` | GET_INFO | `41`: protocol, firmware version string |
-| `02` | GET_STATE | `42`: protocol, 10 settings, output flags, USB flags, measured USB tempo ×10, beat, bar |
+| `02` | GET_STATE | `42`: protocol, 10 settings, output flags, USB flags, measured USB tempo ×10, beat, bar, then (firmware 1.6.1+) SYNC 1 PPQN, SYNC 2 PPQN |
 | `03` | SET `<param> <lo> <hi>` | `42` |
 | `04` | TRANSPORT `<out> <action>` (out 0, 1 or 2 = both; action 0 toggle, 1 start, 2 stop) | `42` |
 | `06` | FACTORY RESET `44 45 46` ("DEF") | `42` |
@@ -90,8 +90,10 @@ Messages are `F0 7D 44 43 <cmd> <data...> F7` (7D = non-commercial ID,
 
 Settings in order: 0 tempo, 1 clock source, 2 wait length (bars), 3 stop Q,
 4 OUT 1 divide, 5 OUT 2 divide, 6 USB out, 7 LED level, 8 screen saver
-(minutes), 9 host transport (1 = follow host). The full description is at the
-top of the firmware sketch.
+(minutes), 9 host transport (1 = follow host). Firmware 1.6.1 adds two
+SET-only ids, 10 SYNC 1 PPQN and 11 SYNC 2 PPQN (1, 2, 4, 8, 12 or 24); their
+values come back as the two bytes before `F7` in the STATE reply. The full
+description is at the top of the firmware sketch.
 
 ## Update firmware (flasher)
 

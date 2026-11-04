@@ -291,6 +291,21 @@
         </div>
       </section>
 
+      <section class="group" aria-labelledby="gSync">
+        <h2 class="section-head" id="gSync">Sync outputs</h2>
+        <div class="callout" id="syncCallout" hidden>Sync settings need DCLK firmware 1.6.1 or later. Update with the <a href="./#flash" target="_blank" rel="noopener">firmware flasher</a>.</div>
+        <div class="row">
+          <div><div class="label">SYNC 1 pulses per beat <span class="chip panel-name">SYNC 1</span></div>
+            <div class="hint" id="sync1Hint"></div></div>
+          <div class="seg" role="radiogroup" aria-label="SYNC 1 pulses per quarter note" id="segSync1"></div>
+        </div>
+        <div class="row">
+          <div><div class="label">SYNC 2 pulses per beat <span class="chip panel-name">SYNC 2</span></div>
+            <div class="hint" id="sync2Hint"></div></div>
+          <div class="seg" role="radiogroup" aria-label="SYNC 2 pulses per quarter note" id="segSync2"></div>
+        </div>
+      </section>
+
       <section class="group" aria-labelledby="gUnit">
         <h2 class="section-head" id="gUnit">Panel</h2>
         <div class="row">
@@ -333,12 +348,14 @@
 
 <script>
 (() => {
-  // ---------------- Protocol (matches firmware 1.3, SYSEX_PROTO 1) ----------------
+  // ---------------- Protocol (firmware 1.3+, SYSEX_PROTO 1; sync PPQN from 1.6.1) ----------------
   const HDR = [0xF0, 0x7D, 0x44, 0x43];
   const CMD = { INFO: 0x01, STATE: 0x02, SET: 0x03, TRANSPORT: 0x04, RESET: 0x06 };
   const RPL = { INFO: 0x41, STATE: 0x42 };
-  const P = { BPM: 0, SRC: 1, WAIT: 2, STOPQ: 3, DIV1: 4, DIV2: 5, USB: 6, LED: 7, SAVER: 8, TPT: 9, COUNT: 10 };
-  const STATE_LEN = 33;
+  // COUNT = params in the STATE block. SYNC1/SYNC2 (1.6.1+) are SET ids whose
+  // values ride as two extra bytes after the bar byte, so older editors still parse it.
+  const P = { BPM: 0, SRC: 1, WAIT: 2, STOPQ: 3, DIV1: 4, DIV2: 5, USB: 6, LED: 7, SAVER: 8, TPT: 9, COUNT: 10, SYNC1: 10, SYNC2: 11 };
+  const STATE_LEN = 33, STATE_LEN_SYNC = 35;
 
   const msg = (cmd, ...data) => [...HDR, cmd, ...data, 0xF7];
   const setMsg = (p, v) => msg(CMD.SET, p, v & 0x7F, (v >> 7) & 0x7F);
@@ -349,8 +366,10 @@
     const params = [];
     for (let p = 0; p < P.COUNT; p++) params.push(d[6 + p * 2] | (d[7 + p * 2] << 7));
     const f1 = d[26], f2 = d[27];
+    const hasSync = d.length >= STATE_LEN_SYNC;
+    params.push(hasSync ? d[32] : 24, hasSync ? d[33] : 24);
     return {
-      proto: d[5], params,
+      proto: d[5], params, hasSync,
       run: [!!(f1 & 1), !!(f1 & 2)],
       pend: [!!(f1 & 4), !!(f1 & 8)],
       stopPend: [!!(f1 & 16), !!(f1 & 32)],
@@ -362,12 +381,12 @@
   }
   function encodeState(s) {          // used by the demo device
     const out = [...HDR, RPL.STATE, 1];
-    for (const v of s.params) out.push(v & 0x7F, (v >> 7) & 0x7F);
+    for (const v of s.params.slice(0, P.COUNT)) out.push(v & 0x7F, (v >> 7) & 0x7F);
     out.push((s.run[0] ? 1 : 0) | (s.run[1] ? 2 : 0) | (s.pend[0] ? 4 : 0) | (s.pend[1] ? 8 : 0) |
              (s.stopPend[0] ? 16 : 0) | (s.stopPend[1] ? 32 : 0) | (s.savePending ? 64 : 0));
     out.push((s.extPresent ? 1 : 0) | (s.hostRunning ? 2 : 0) | (s.usbRunning ? 4 : 0));
     const eb = Math.round(s.extBpm * 10);
-    out.push(eb & 0x7F, (eb >> 7) & 0x7F, s.beat, s.bar, 0xF7);
+    out.push(eb & 0x7F, (eb >> 7) & 0x7F, s.beat, s.bar, s.params[P.SYNC1], s.params[P.SYNC2], 0xF7);
     return out;
   }
 
@@ -375,7 +394,8 @@
   const WAITS = [1, 2, 4, 8, 16];
   const DIVS = [1, 2, 3, 4, 6, 8];
   const SAVERS = [0, 1, 5, 10, 30];
-  const DEFAULTS = [120, 0, 4, 0, 1, 1, 0, 1, 5, 1];
+  const SYNCS = [1, 2, 4, 8, 12, 24];
+  const DEFAULTS = [120, 0, 4, 0, 1, 1, 0, 1, 5, 1, 24, 24];
 
   // ---------------- Demo device: a small model of the firmware ----------------
   class DemoDCLK {
@@ -449,7 +469,7 @@
     send(d) {
       if (!isOurs(d)) return;
       const cmd = d[4];
-      if (cmd === CMD.INFO) return this.reply([...HDR, RPL.INFO, 1, ...[...'1.5'].map(c => c.charCodeAt(0)), 0xF7]);
+      if (cmd === CMD.INFO) return this.reply([...HDR, RPL.INFO, 1, ...[...'1.6.1'].map(c => c.charCodeAt(0)), 0xF7]);
       if (cmd === CMD.SET) {
         const p = d[5], v = d[6] | (d[7] << 7);
         if (p === P.SRC || p === P.TPT) { this.run = [false, false]; this.pend = [false, false]; this.stopPend = [false, false]; this.loopTick = 0; }
@@ -491,6 +511,8 @@
   buildSeg($('segDiv1'), 'div1', DIVS, v => `/${v}`);
   buildSeg($('segDiv2'), 'div2', DIVS, v => `/${v}`);
   buildSeg($('segSaver'), 'saver', SAVERS, v => v === 0 ? 'Off' : `${v} min`);
+  buildSeg($('segSync1'), 'sync1', SYNCS, v => `${v}`);
+  buildSeg($('segSync2'), 'sync2', SYNCS, v => `${v}`);
 
   // ---------------- OLED: a 128x32 copy of DCLK's SSD1306 main screen ----------------
   // Picopixel from the Adafruit GFX Library, the same bitmaps the firmware draws with.
@@ -767,6 +789,7 @@
   radioBind('src', P.SRC); radioBind('tpt', P.TPT); radioBind('wait', P.WAIT);
   radioBind('div1', P.DIV1); radioBind('div2', P.DIV2); radioBind('usb', P.USB);
   radioBind('led', P.LED); radioBind('saver', P.SAVER);
+  radioBind('sync1', P.SYNC1); radioBind('sync2', P.SYNC2);
   $('stopq').addEventListener('change', e => setParam(P.STOPQ, e.target.checked ? 1 : 0));
 
   // Tempo: send while dragging, at most every 40 ms
@@ -899,6 +922,18 @@
     $('usbHint').textContent = ext
       ? 'Off while DCLK follows USB clock. The host is the master.'
       : 'The USB host gets the same clock as this output, divider included.';
+
+    // Sync outputs
+    const syncOk = !s || s.hasSync;
+    $('syncCallout').hidden = syncOk;
+    for (const [k, p] of [['1', P.SYNC1], ['2', P.SYNC2]]) {
+      const v = param(p), div = param(k === '1' ? P.DIV1 : P.DIV2);
+      check(`sync${k}${v}`, true);
+      document.querySelectorAll(`input[name="sync${k}"]`).forEach(r => { r.disabled = !syncOk; });
+      const use = { 24: 'DIN-sync rate', 12: '32nd-note triplets', 8: '16th-note triplets', 4: '16th notes', 2: '8th notes (Volca, Pocket Operator)', 1: 'quarter notes' }[v];
+      $(`sync${k}Hint`).textContent = `Tip: ${v} pulse${v === 1 ? '' : 's'} per beat, ${use}` +
+        (div > 1 ? `, after CH${k} DIV /${div}` : '') + '. Ring: high while CH' + k + ' plays.';
+    }
 
     // Panel
     check('led' + param(P.LED), true);
