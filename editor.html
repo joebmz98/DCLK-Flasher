@@ -542,7 +542,7 @@
     return x;
   }
   let oledKey = '';
-  // Same layout as firmware 1.6.2+: CH1/CH2 tabs (white = playing),
+  // Same layout as firmware 1.6.2+: CH1/CH2 tabs (shown only while playing),
   // tempo at Picopixel x4, beat bars along the bottom with the current one raised
   function drawOled(text, activeBar, centred, run) {
     const key = text + '|' + activeBar + '|' + centred + '|' + (run ? run.join() : '-');
@@ -550,9 +550,10 @@
     oledKey = key;
     octx.fillStyle = '#000'; octx.fillRect(0, 0, 128, 32);
     if (run) for (const i of [0, 1]) {
+      if (!run[i]) continue;                                  // tab only while playing
       const x0 = i * 64, label = i ? 'CH2' : 'CH1';
-      if (run[i]) { octx.fillStyle = '#fff'; octx.fillRect(x0, 0, 63, 6); }
-      octx.fillStyle = run[i] ? '#000' : '#fff';
+      octx.fillStyle = '#fff'; octx.fillRect(x0, 0, 63, 6);
+      octx.fillStyle = '#000';
       const w = gfxText(label, 0, 0, 1, false) - 1;           // drop the last glyph's spacing
       gfxText(label, x0 + 32 - Math.floor(w / 2), 5, 1);
     }
